@@ -129,7 +129,8 @@ client.on(Events.MessageCreate, async message => {
                 throw new Error(`Gemini API request failed with status ${response.status}: ${errorData.error?.message || response.statusText}`);
             }
 
-            const result = response.json();
+            // FIX: Await the response.json() call
+            const result = await response.json(); // Changed this line
 
             let summary = 'My circuits are currently experiencing a comedic malfunction. Try again later!'; // Updated error message
             if (result.candidates && result.candidates.length > 0 &&
