@@ -18,7 +18,8 @@ const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/
 // You can get a user's ID by enabling Developer Mode in Discord settings (User Settings > Advanced > Developer Mode),
 // then right-clicking on their username and selecting "Copy ID".
 const BLACKLISTED_USER_IDS = [
-     '718505488202989678', 
+    'YOUR_USER_ID_HERE', // Replace 'YOUR_USER_ID_HERE' with the actual Discord User ID
+    // 'ANOTHER_USER_ID', // You can add more IDs, each in single quotes, separated by commas
 ];
 // --- END BLACKLIST CONFIGURATION ---
 
@@ -48,23 +49,23 @@ client.on(Events.MessageCreate, async message => {
     // Log the message content to the console for debugging (commented out for less console spam)
     // console.log(`Received message: "${message.content}" from ${message.author.tag}`);
 
-    // --- BLACKLIST CHECK ---
-    if (BLACKLISTED_USER_IDS.includes(message.author.id)) {
-        // If the user is blacklisted, reply with a clown emoji and stop processing
-        try {
-            await message.reply('🤡'); // Reply with a clown emoji
-            console.log(`Blacklisted user ${message.author.tag} attempted to use the bot.`);
-        } catch (error) {
-            console.error(`Error replying to blacklisted user:`, error);
-        }
-        return; // Stop further processing for blacklisted users
-    }
-    // --- END BLACKLIST CHECK ---
-
     // --- Command for Summarization ---
     // We'll use a simple prefix command for now (e.g., "!tldr")
     // You could also implement slash commands for a more modern Discord experience.
     if (message.content.toLowerCase().startsWith('!tldr')) {
+        // --- BLACKLIST CHECK (MOVED INSIDE COMMAND BLOCK) ---
+        if (BLACKLISTED_USER_IDS.includes(message.author.id)) {
+            // If the user is blacklisted AND used the command, reply with a clown emoji and stop processing
+            try {
+                await message.reply('🤡'); // Reply with a clown emoji
+                console.log(`Blacklisted user ${message.author.tag} attempted to use the bot command.`);
+            } catch (error) {
+                console.error(`Error replying to blacklisted user:`, error);
+            }
+            return; // Stop further processing for blacklisted users
+        }
+        // --- END BLACKLIST CHECK ---
+
         // Acknowledge the command immediately to let the user know the bot is working
         const thinkingMessage = await message.channel.send('Thinking... let\'s see what magical (or cursed) summary awaits.'); // Updated thinking message
 
