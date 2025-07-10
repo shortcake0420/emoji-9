@@ -44,7 +44,7 @@ client.on(Events.MessageCreate, async message => {
     // You could also implement slash commands for a more modern Discord experience.
     if (message.content.toLowerCase().startsWith('!tldr')) {
         // Acknowledge the command immediately to let the user know the bot is working
-        const thinkingMessage = await message.channel.send('Thinking... please wait while I try to make sense of this chaos.'); // Updated thinking message
+        const thinkingMessage = await message.channel.send('Thinking... let\'s see what magical (or cursed) summary awaits.'); // Updated thinking message
 
         try {
             // Determine how many messages to fetch (default to 50 if not specified)
@@ -67,19 +67,28 @@ client.on(Events.MessageCreate, async message => {
 
             if (!conversation) {
                 // Corrected syntax for the string literal
-                await thinkingMessage.edit(`Looks like everyone has been quiet. Nothing to summarize here!`); // Fix: Using backticks for string
+                await thinkingMessage.edit(`Looks like everyone's been quiet. Nothing to summarize here!`); // Fix: Using backticks for string
                 return;
             }
 
-            // Prepare the prompt for the LLM - MODIFIED FOR FUNNIER SUMMARIES
-            const prompt = `Please summarize the following Discord conversation concisely, but with a humorous and slightly sarcastic tone. Make it sound like a witty observer is commenting on the discussion. Keep it under 500 tokens:\n\n${conversation}`;
+            // --- Dynamic Prompt Selection for Humor ---
+            let prompt = '';
+            // 30% chance for wholesome, 70% chance for edgy
+            const humorRoll = Math.random();
+
+            if (humorRoll < 0.3) { // Wholesome/Disney-themed humor
+                prompt = `Please summarize the following Discord conversation very concisely, with a wholesome, uplifting, and slightly magical tone, like a Disney character offering life lessons. Focus on the positive aspects or find a lighthearted, innocent spin on the discussion. Keep it under 150 tokens.`;
+            } else { // Edgy/4chan humor (default)
+                prompt = `Please summarize the following Discord conversation very concisely, with edgy, dark, and sarcastic humor, reminiscent of 4chan's /b/ board. Make it sound like a cynical, unfiltered observer is commenting on the discussion. Focus on the absolute core points, but don't hold back on the roast. Keep it under 150 tokens.`;
+            }
+            // The actual conversation to summarize is appended after the prompt.
 
             // Make the API call to the Gemini LLM
             const payload = {
-                contents: [{ role: "user", parts: [{ text: prompt }] }],
+                contents: [{ role: "user", parts: [{ text: prompt + `\n\n${conversation}` }] }], // Append conversation here
                 generationConfig: {
                     temperature: 0.9, // Increased temperature for more creative/humorous output
-                    maxOutputTokens: 500, // Limit the length of the summary
+                    maxOutputTokens: 150, // DECREASED maxOutputTokens for shorter summaries
                 },
             };
 
