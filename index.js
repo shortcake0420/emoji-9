@@ -73,13 +73,15 @@ client.on(Events.MessageCreate, async message => {
 
             // --- Dynamic Prompt Selection for Humor ---
             let prompt = '';
-            // 30% chance for wholesome, 70% chance for edgy
+            // 40% chance for wholesome/Disney, 30% for /pol/ humor, 30% for Reddit humor
             const humorRoll = Math.random();
 
-            if (humorRoll < 0.3) { // Wholesome/Disney-themed humor
+            if (humorRoll < 0.4) { // Wholesome/Disney-themed humor (40%)
                 prompt = `Please summarize the following Discord conversation very concisely, with a wholesome, uplifting, and slightly magical tone, like a Disney character offering life lessons. Focus on the positive aspects or find a lighthearted, innocent spin on the discussion. Keep it under 150 tokens.`;
-            } else { // Edgy/4chan humor (default)
-                prompt = `Please summarize the following Discord conversation very concisely, with edgy, dark, and sarcastic humor, reminiscent of 4chan's /b/ board. Make it sound like a cynical, unfiltered observer is commenting on the discussion. Focus on the absolute core points, but don't hold back on the roast. Keep it under 150 tokens.`;
+            } else if (humorRoll < 0.7) { // Edgy/4chan /pol/ humor (30%)
+                prompt = `Please summarize the following Discord conversation very concisely, with a dry, cynical, and slightly provocative tone, reminiscent of a /pol/ user. Focus on the absolute core points, highlight any perceived absurdities or contradictions, and don't shy away from uncomfortable truths, but avoid explicit slurs or hate speech. Keep it under 150 tokens.`;
+            } else { // Reddit-type humor (30%)
+                prompt = `Please summarize the following Discord conversation very concisely, with a self-aware, meme-infused, and slightly ironic tone, like a typical Reddit comment section. Use common internet slang, inside jokes, and maybe a dash of cringe. Keep it under 150 tokens.`;
             }
             // The actual conversation to summarize is appended after the prompt.
 
