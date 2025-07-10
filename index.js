@@ -156,15 +156,15 @@ client.on(Events.MessageCreate, async message => {
 
             // --- Dynamic Prompt Selection for Humor ---
             let prompt = '';
-            // New probabilities: 20% Disney-flavored witty, 40% /pol/ humor, 40% Reddit humor
+            // New probabilities: 10% Disney-flavored witty, 45% /pol/ humor, 45% Reddit humor
             const humorRoll = Math.random();
 
-            if (humorRoll < 0.2) { // Disney-flavored witty (20%) - Refined for subtle references
-                prompt = `Please summarize the following Discord conversation in 2-3 brief bullet points (TLDR style), with a witty, chill, and slightly mischievous tone. Occasionally weave in subtle, clever references to classic animated films or their underlying themes, but keep it sharp and to the point. Ensure you refer to participants by their Discord username. Imagine a clever observer who just happens to enjoy animated classics.`;
-            } else if (humorRoll < 0.6) { // Edgy/4chan /pol/ humor (40%) - Centrist & Devil's Advocate
-                prompt = `Please summarize the following Discord conversation in 2-3 brief bullet points (TLDR style), with a dry, cynical, and provocatively centrist tone. Act as a devil's advocate, dissecting arguments from all sides, highlighting logical fallacies, perceived absurdities, and inconvenient truths, without favoring any particular political extreme. Ensure you refer to participants by their Discord username. Keep it witty, a bit rude, and troll-y, but remain chill. Avoid explicit slurs or hate speech.`;
-            } else { // Reddit-type humor (40%) - Witty, rude, troll-y, chill, unpopular opinions
-                prompt = `Please summarize the following Discord conversation in 2-3 brief bullet points (TLDR style), with a self-aware, ironic, and dry tone, like a top-tier Reddit comment. Use subtle internet culture references and inside jokes. Ensure you refer to participants by their Discord username. Be witty, a little rude, and troll-y, but ultimately chill. Maybe even drop an unpopular opinion or two, just for the lulz.`;
+            if (humorRoll < 0.1) { // Disney-flavored witty (10%) - Less frequent, more subtle
+                prompt = `Please summarize the following Discord conversation in 2-3 concise bullet points (TLDR style), with a witty, chill, and slightly mischievous tone. Occasionally weave in subtle, clever references to classic animated films or their underlying themes, but keep it sharp and to the point. Ensure you refer to participants by their Discord username. Imagine a clever observer who just happens to enjoy animated classics.`;
+            } else if (humorRoll < 0.55) { // Edgy/4chan /pol/ humor (45%)
+                prompt = `Please summarize the following Discord conversation in 2-3 concise bullet points (TLDR style), with a dry, cynical, and provocatively centrist tone. Act as a devil's advocate, dissecting arguments from all sides, highlighting logical fallacies, perceived absurdities, and inconvenient truths, without favoring any particular political extreme. Ensure you refer to participants by their Discord username. Keep it witty, a bit rude, and troll-y, but remain chill. Avoid explicit slurs or hate speech.`;
+            } else { // Reddit-type humor (45%)
+                prompt = `Please summarize the following Discord conversation in 2-3 concise bullet points (TLDR style), with a self-aware, ironic, and dry tone, like a top-tier Reddit comment. Use subtle internet culture references and inside jokes. Ensure you refer to participants by their Discord username. Be witty, a little rude, and troll-y, but ultimately chill. Maybe even drop an unpopular opinion or two, just for the lulz.`;
             }
             // The actual conversation to summarize is appended after the prompt.
 
@@ -173,7 +173,7 @@ client.on(Events.MessageCreate, async message => {
                 contents: [{ role: "user", parts: [{ text: prompt + `\n\n${conversation}` }] }], // Append conversation here
                 generationConfig: {
                     temperature: 0.9, // Increased temperature for more creative/humorous output
-                    maxOutputTokens: 100, // Increased to allow for 2-3 brief bullet points
+                    maxOutputTokens: 150, // Increased to allow for 2-3 brief bullet points
                 },
             };
 
@@ -202,7 +202,8 @@ client.on(Events.MessageCreate, async message => {
             }
 
             // Edit the "thinking-" message with the summary
-            await thinkingMessage.edit(`**TLDR of the last ${fetchedMessages.size} messages:**\n\n${summary}`); // Updated response prefix
+            // Removed extra newline characters to make bullets start immediately
+            await thinkingMessage.edit(`**TLDR of the last ${fetchedMessages.size} messages:**\n${summary}`); // Changed from \n\n to \n
             console.log(`Successfully summarized conversation for ${message.channel.name}`);
 
         } catch (error) {
