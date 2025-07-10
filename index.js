@@ -216,14 +216,14 @@ client.on(Events.MessageCreate, async message => {
         const thinkingMessage = await message.channel.send('Alright, buttercup, let\'s break this down without melting my circuits...');
 
         try {
-            // MODIFIED ELI5 PROMPT for personality
-            const prompt = `Explain "${content}" like I'm 5 years old, but do it with a witty, snarky, and slightly troll-y tone. Use simple words and analogies a child would understand, but don't hold back on the subtle jabs or ironic observations. Keep the explanation to 1-2 short sentences.`;
+            // MODIFIED ELI5 PROMPT for personality and factual explanation for 13-year-olds
+            const prompt = `Explain "${content}" factually and clearly, as if you're explaining it to a curious 13-year-old. Maintain a witty, snarky, and slightly troll-y tone. Keep the explanation concise, aiming for 2-3 sentences.`;
 
             const payload = {
                 contents: [{ role: "user", parts: [{ text: prompt }] }],
                 generationConfig: {
-                    temperature: 0.8, // Slightly higher temperature for personality, but not too wild for explanations
-                    maxOutputTokens: 70, // Short and sweet, but complete thoughts
+                    temperature: 0.7, // Keep it less creative for factual explanations
+                    maxOutputTokens: 100, // Increased for slightly longer, more factual explanation
                 },
             };
 
@@ -249,7 +249,10 @@ client.on(Events.MessageCreate, async message => {
                 console.warn('Unexpected Gemini API response structure for ELI5:', result);
             }
 
-            await thinkingMessage.edit(`**ELI5:** ${explanation}`);
+            // Construct Wikipedia link
+            const wikipediaLink = `https://en.wikipedia.org/wiki/${encodeURIComponent(content.replace(/ /g, '_'))}`;
+
+            await thinkingMessage.edit(`**ELI5 (or more like ELI13):** ${explanation}\n\nWant to know more? Check out: <${wikipediaLink}>`);
             console.log(`Successfully explained "${content}" for ${message.author.tag}.`);
 
         } catch (error) {
