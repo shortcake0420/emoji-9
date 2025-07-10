@@ -67,7 +67,7 @@ client.on(Events.MessageCreate, async message => {
 
             if (!conversation) {
                 // Corrected syntax for the string literal
-                await thinkingMessage.edit(`Looks like everyone's been quiet. Nothing to summarize here!`); // Fix: Using backticks for string
+                await thinkingMessage.edit(`Looks like everyone has been quiet. Nothing to summarize here!`); // Fix: Using backticks for string
                 return;
             }
 
