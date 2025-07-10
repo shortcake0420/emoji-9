@@ -252,12 +252,12 @@ client.on(Events.MessageCreate, async message => {
             // Construct Wikipedia link
             const wikipediaLink = `https://en.wikipedia.org/wiki/${encodeURIComponent(content.replace(/ /g, '_'))}`;
 
-            await thinkingMessage.edit(`**ELI5 (or more like ELI13):** ${explanation}\n\nWant to know more? Check out: <${wikipediaLink}>`);
+            await thinkingMessage.edit(`**ELI5:** ${explanation}\n\nWant to know more? Check out: <${wikipediaLink}>`);
             console.log(`Successfully explained "${content}" for ${message.author.tag}.`);
 
         } catch (error) {
             console.error('Error during ELI5 summarization:', error);
-            await thinkingMessage.edit(`My simple-explanation circuits are on the fritz, probably because your question was too dumb: ${error.message}`); // Updated error message for personality
+            await thinkingMessage.edit(`Whoever said there's no such thing as a dumb question lied to you: ${error.message}`); // Updated error message for personality
         }
     }
     // --- END NEW COMMAND ---
