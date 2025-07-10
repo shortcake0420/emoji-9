@@ -73,15 +73,15 @@ client.on(Events.MessageCreate, async message => {
 
             // --- Dynamic Prompt Selection for Humor ---
             let prompt = '';
-            // 40% chance for wholesome/Disney, 30% for /pol/ humor, 30% for Reddit humor
+            // New probabilities: 20% Disney-flavored witty, 40% /pol/ humor, 40% Reddit humor
             const humorRoll = Math.random();
 
-            if (humorRoll < 0.4) { // Wholesome/Disney-themed humor (40%)
-                prompt = `Please summarize the following Discord conversation very concisely, with a wholesome, uplifting, and slightly magical tone, like a Disney character offering life lessons. Focus on the positive aspects or find a lighthearted, innocent spin on the discussion. Keep it under 150 tokens.`;
-            } else if (humorRoll < 0.7) { // Edgy/4chan /pol/ humor (30%)
-                prompt = `Please summarize the following Discord conversation very concisely, with a dry, cynical, and slightly provocative tone, reminiscent of a /pol/ user. Focus on the absolute core points, highlight any perceived absurdities or contradictions, and don't shy away from uncomfortable truths, but avoid explicit slurs or hate speech. Keep it under 150 tokens.`;
-            } else { // Reddit-type humor (30%)
-                prompt = `Please summarize the following Discord conversation very concisely, with a self-aware, meme-infused, and slightly ironic tone, like a typical Reddit comment section. Use common internet slang, inside jokes, and maybe a dash of cringe. Keep it under 150 tokens.`;
+            if (humorRoll < 0.2) { // Disney-flavored witty (20%) - Refined for subtle references
+                prompt = `Please summarize the following Discord conversation very concisely, with a witty, chill, and slightly mischievous tone. Occasionally weave in subtle, clever references to classic animated films or their underlying themes, but keep it sharp and to the point. Imagine a clever observer who just happens to enjoy animated classics. Keep it under 150 tokens.`;
+            } else if (humorRoll < 0.6) { // Edgy/4chan /pol/ humor (40%) - Centrist & Devil's Advocate
+                prompt = `Please summarize the following Discord conversation very concisely, with a dry, cynical, and provocatively centrist tone. Act as a devil's advocate, dissecting arguments from all sides, highlighting logical fallacies, perceived absurdities, and inconvenient truths, without favoring any particular political extreme. Keep it witty, a bit rude, and troll-y, but remain chill. Avoid explicit slurs or hate speech. Keep it under 150 tokens.`;
+            } else { // Reddit-type humor (40%) - Witty, rude, troll-y, chill, unpopular opinions
+                prompt = `Please summarize the following Discord conversation very concisely, with a self-aware, meme-infused, and ironic tone, like a top-tier Reddit comment. Use common internet slang and inside jokes. Be witty, a little rude, and troll-y, but ultimately chill. Maybe even drop an unpopular opinion or two, just for the lulz. Keep it under 150 tokens.`;
             }
             // The actual conversation to summarize is appended after the prompt.
 
