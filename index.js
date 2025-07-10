@@ -113,7 +113,7 @@ client.on(Events.MessageCreate, async message => {
                 contents: [{ role: "user", parts: [{ text: prompt + `\n\n${conversation}` }] }], // Append conversation here
                 generationConfig: {
                     temperature: 0.9, // Increased temperature for more creative/humorous output
-                    maxOutputTokens: 50, // SIGNIFICANTLY DECREASED maxOutputTokens for ultra-short summaries
+                    maxOutputTokens: 60, // Changed from 50 to 60
                 },
             };
 
