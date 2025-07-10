@@ -36,15 +36,15 @@ client.on(Events.MessageCreate, async message => {
     // Ignore messages from other bots to prevent infinite loops
     if (message.author.bot) return;
 
-    // Log the message content to the console for debugging
-    //console.log(`Received message: "${message.content}" from ${message.author.tag}`);
+    // Log the message content to the console for debugging (commented out for less console spam)
+    // console.log(`Received message: "${message.content}" from ${message.author.tag}`);
 
     // --- Command for Summarization ---
     // We'll use a simple prefix command for now (e.g., "!tldr")
     // You could also implement slash commands for a more modern Discord experience.
-    if (message.content.toLowerCase().startsWith('!tldr')) { // Changed from '!summarize' to '!tldr'
+    if (message.content.toLowerCase().startsWith('!tldr')) {
         // Acknowledge the command immediately to let the user know the bot is working
-        const thinkingMessage = await message.channel.send('Thinking... please wait while I summarize the conversation.');
+        const thinkingMessage = await message.channel.send('Thinking... please wait while I try to make sense of this chaos.'); // Updated thinking message
 
         try {
             // Determine how many messages to fetch (default to 50 if not specified)
@@ -66,18 +66,18 @@ client.on(Events.MessageCreate, async message => {
                 .join('\n');
 
             if (!conversation) {
-                await thinkingMessage.edit('Could not find any recent human messages to summarize.');
+                await thinkingMessage.edit('Looks like everyone's been quiet. Nothing to summarize here!'); // Updated empty message
                 return;
             }
 
-            // Prepare the prompt for the LLM
-            const prompt = `Please summarize the following Discord conversation concisely:\n\n${conversation}`;
+            // Prepare the prompt for the LLM - MODIFIED FOR FUNNIER SUMMARIES
+            const prompt = `Please summarize the following Discord conversation concisely, but with a humorous and slightly sarcastic tone. Make it sound like a witty observer is commenting on the discussion. Keep it under 500 tokens:\n\n${conversation}`;
 
             // Make the API call to the Gemini LLM
             const payload = {
                 contents: [{ role: "user", parts: [{ text: prompt }] }],
                 generationConfig: {
-                    temperature: 0.7, // Adjust creativity (0.0 - 1.0)
+                    temperature: 0.9, // Increased temperature for more creative/humorous output
                     maxOutputTokens: 500, // Limit the length of the summary
                 },
             };
@@ -96,7 +96,7 @@ client.on(Events.MessageCreate, async message => {
 
             const result = await response.json();
 
-            let summary = 'Failed to generate summary.';
+            let summary = 'My circuits are currently experiencing a comedic malfunction. Try again later!'; // Updated error message
             if (result.candidates && result.candidates.length > 0 &&
                 result.candidates[0].content && result.candidates[0].content.parts &&
                 result.candidates[0].content.parts.length > 0) {
@@ -106,12 +106,272 @@ client.on(Events.MessageCreate, async message => {
             }
 
             // Edit the "thinking..." message with the summary
-            await thinkingMessage.edit(`**Summary of the last ${fetchedMessages.size} messages:**\n\n${summary}`);
+            await thinkingMessage.edit(`**TLDR of the last ${fetchedMessages.size} messages:**\n\n${summary}`); // Updated response prefix
             console.log(`Successfully summarized conversation for ${message.channel.name}`);
 
         } catch (error) {
             console.error('Error during summarization:', error);
-            await thinkingMessage.edit(`An error occurred while trying to summarize: ${error.message}`);
+            await thinkingMessage.edit(`My humor circuits are on the fritz: ${error.message}`); // Updated error message
+        }
+    }
+});
+
+// Log in to Discord with your bot's token
+// The token should be stored in a .env file for security
+// Make sure you have a .env file in the same directory as your bot.js file
+// and it contains a line like: DISCORD_TOKEN=YOUR_BOT_TOKEN_HERE
+client.login(process.env.DISCORD_TOKEN)
+    .then(() => console.log('Bot successfully logged in to Discord.'))
+    .catch(error => console.error('Failed to log in to Discord:', error));
+
+// Add this for more robust error handling during startup
+process.on('unhandledRejection', error => {
+    console.error('Unhandled promise rejection:', error);
+});
+// Import the necessary classes from the discord.js library
+// Client: The main class for interacting with the Discord API
+// Events: An enum containing all the events emitted by the Discord client
+// GatewayIntentBits: Used to specify which events your bot wants to receive from Discord
+import { Client, Events, GatewayIntentBits } from 'discord.js';
+
+// Load environment variables from a .env file
+// This is crucial for keeping sensitive information like your bot token and API key secure.
+// Make sure you have 'dotenv' installed: npm install dotenv
+import 'dotenv/config';
+
+// Define constants for the Gemini API
+// The GEMINI_API_KEY must be set in your local .env file when running the bot locally.
+const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY || ""}`;
+
+// Create a new Discord client instance
+// We specify the intents our bot needs. Intents tell Discord which events your bot wants to receive.
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,           // Required for general guild (server) operations.
+        GatewayIntentBits.GuildMessages,    // Required to receive messages from guilds.
+        GatewayIntentBits.MessageContent,   // CRUCIAL for reading message content.
+                                            // Make sure this is enabled in your bot's settings on the Discord Developer Portal.
+        GatewayIntentBits.DirectMessages,   // Required to receive direct messages.
+    ],
+});
+
+// Event listener for when the client is ready (bot has logged in)
+// The 'once' property means this event will only fire once when the bot starts
+client.once(Events.ClientReady, c => {
+    console.log(`Ready! Logged in as ${c.user.tag}`);
+});
+
+// Event listener for when a message is created
+client.on(Events.MessageCreate, async message => {
+    // Ignore messages from other bots to prevent infinite loops
+    if (message.author.bot) return;
+
+    // Log the message content to the console for debugging (commented out for less console spam)
+    // console.log(`Received message: "${message.content}" from ${message.author.tag}`);
+
+    // --- Command for Summarization ---
+    // We'll use a simple prefix command for now (e.g., "!tldr")
+    // You could also implement slash commands for a more modern Discord experience.
+    if (message.content.toLowerCase().startsWith('!tldr')) {
+        // Acknowledge the command immediately to let the user know the bot is working
+        const thinkingMessage = await message.channel.send('Thinking... please wait while I try to make sense of this chaos.'); // Updated thinking message
+
+        try {
+            // Determine how many messages to fetch (default to 50 if not specified)
+            const args = message.content.split(' ');
+            let messageCount = 50; // Default number of messages to summarize
+            if (args.length > 1 && !isNaN(parseInt(args[1]))) {
+                messageCount = Math.min(parseInt(args[1]), 100); // Limit to a maximum of 100 messages to avoid very long prompts
+            }
+
+            // Fetch recent messages from the channel
+            // The `before` option ensures we don't include the command itself in the summary
+            const fetchedMessages = await message.channel.messages.fetch({ limit: messageCount, before: message.id });
+
+            // Filter out messages from bots and format them for the LLM prompt
+            const conversation = fetchedMessages
+                .filter(msg => !msg.author.bot) // Exclude bot messages from the conversation
+                .map(msg => `${msg.author.username}: ${msg.content}`)
+                .reverse() // Reverse to get chronological order for the LLM
+                .join('\n');
+
+            if (!conversation) {
+                await thinkingMessage.edit('Looks like everyone's been quiet. Nothing to summarize here!'); // Updated empty message
+                return;
+            }
+
+            // Prepare the prompt for the LLM - MODIFIED FOR FUNNIER SUMMARIES
+            const prompt = `Please summarize the following Discord conversation concisely, but with a humorous and slightly sarcastic tone. Make it sound like a witty observer is commenting on the discussion. Keep it under 500 tokens:\n\n${conversation}`;
+
+            // Make the API call to the Gemini LLM
+            const payload = {
+                contents: [{ role: "user", parts: [{ text: prompt }] }],
+                generationConfig: {
+                    temperature: 0.9, // Increased temperature for more creative/humorous output
+                    maxOutputTokens: 500, // Limit the length of the summary
+                },
+            };
+
+            const response = await fetch(GEMINI_API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                console.error('Gemini API error response:', errorData);
+                throw new Error(`Gemini API request failed with status ${response.status}: ${errorData.error?.message || response.statusText}`);
+            }
+
+            const result = await response.json();
+
+            let summary = 'My circuits are currently experiencing a comedic malfunction. Try again later!'; // Updated error message
+            if (result.candidates && result.candidates.length > 0 &&
+                result.candidates[0].content && result.candidates[0].content.parts &&
+                result.candidates[0].content.parts.length > 0) {
+                summary = result.candidates[0].content.parts[0].text;
+            } else {
+                console.warn('Unexpected Gemini API response structure:', result);
+            }
+
+            // Edit the "thinking..." message with the summary
+            await thinkingMessage.edit(`**TLDR of the last ${fetchedMessages.size} messages:**\n\n${summary}`); // Updated response prefix
+            console.log(`Successfully summarized conversation for ${message.channel.name}`);
+
+        } catch (error) {
+            console.error('Error during summarization:', error);
+            await thinkingMessage.edit(`My humor circuits are on the fritz: ${error.message}`); // Updated error message
+        }
+    }
+});
+
+// Log in to Discord with your bot's token
+// The token should be stored in a .env file for security
+// Make sure you have a .env file in the same directory as your bot.js file
+// and it contains a line like: DISCORD_TOKEN=YOUR_BOT_TOKEN_HERE
+client.login(process.env.DISCORD_TOKEN)
+    .then(() => console.log('Bot successfully logged in to Discord.'))
+    .catch(error => console.error('Failed to log in to Discord:', error));
+
+// Add this for more robust error handling during startup
+process.on('unhandledRejection', error => {
+    console.error('Unhandled promise rejection:', error);
+});
+// Import the necessary classes from the discord.js library
+// Client: The main class for interacting with the Discord API
+// Events: An enum containing all the events emitted by the Discord client
+// GatewayIntentBits: Used to specify which events your bot wants to receive from Discord
+import { Client, Events, GatewayIntentBits } from 'discord.js';
+
+// Load environment variables from a .env file
+// This is crucial for keeping sensitive information like your bot token and API key secure.
+// Make sure you have 'dotenv' installed: npm install dotenv
+import 'dotenv/config';
+
+// Define constants for the Gemini API
+// The GEMINI_API_KEY must be set in your local .env file when running the bot locally.
+const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY || ""}`;
+
+// Create a new Discord client instance
+// We specify the intents our bot needs. Intents tell Discord which events your bot wants to receive.
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,           // Required for general guild (server) operations.
+        GatewayIntentBits.GuildMessages,    // Required to receive messages from guilds.
+        GatewayIntentBits.MessageContent,   // CRUCIAL for reading message content.
+                                            // Make sure this is enabled in your bot's settings on the Discord Developer Portal.
+        GatewayIntentBits.DirectMessages,   // Required to receive direct messages.
+    ],
+});
+
+// Event listener for when the client is ready (bot has logged in)
+// The 'once' property means this event will only fire once when the bot starts
+client.once(Events.ClientReady, c => {
+    console.log(`Ready! Logged in as ${c.user.tag}`);
+});
+
+// Event listener for when a message is created
+client.on(Events.MessageCreate, async message => {
+    // Ignore messages from other bots to prevent infinite loops
+    if (message.author.bot) return;
+
+    // Log the message content to the console for debugging (commented out for less console spam)
+    // console.log(`Received message: "${message.content}" from ${message.author.tag}`);
+
+    // --- Command for Summarization ---
+    // We'll use a simple prefix command for now (e.g., "!tldr")
+    // You could also implement slash commands for a more modern Discord experience.
+    if (message.content.toLowerCase().startsWith('!tldr')) {
+        // Acknowledge the command immediately to let the user know the bot is working
+        const thinkingMessage = await message.channel.send('Thinking... please wait while I try to make sense of this chaos.'); // Updated thinking message
+
+        try {
+            // Determine how many messages to fetch (default to 50 if not specified)
+            const args = message.content.split(' ');
+            let messageCount = 50; // Default number of messages to summarize
+            if (args.length > 1 && !isNaN(parseInt(args[1]))) {
+                messageCount = Math.min(parseInt(args[1]), 100); // Limit to a maximum of 100 messages to avoid very long prompts
+            }
+
+            // Fetch recent messages from the channel
+            // The `before` option ensures we don't include the command itself in the summary
+            const fetchedMessages = await message.channel.messages.fetch({ limit: messageCount, before: message.id });
+
+            // Filter out messages from bots and format them for the LLM prompt
+            const conversation = fetchedMessages
+                .filter(msg => !msg.author.bot) // Exclude bot messages from the conversation
+                .map(msg => `${msg.author.username}: ${msg.content}`)
+                .reverse() // Reverse to get chronological order for the LLM
+                .join('\n');
+
+            if (!conversation) {
+                await thinkingMessage.edit('Looks like everyone's been quiet. Nothing to summarize here!'); // Updated empty message
+                return;
+            }
+
+            // Prepare the prompt for the LLM - MODIFIED FOR FUNNIER SUMMARIES
+            const prompt = `Please summarize the following Discord conversation concisely, but with a humorous and slightly sarcastic tone. Make it sound like a witty observer is commenting on the discussion. Keep it under 500 tokens:\n\n${conversation}`;
+
+            // Make the API call to the Gemini LLM
+            const payload = {
+                contents: [{ role: "user", parts: [{ text: prompt }] }],
+                generationConfig: {
+                    temperature: 0.9, // Increased temperature for more creative/humorous output
+                    maxOutputTokens: 500, // Limit the length of the summary
+                },
+            };
+
+            const response = await fetch(GEMINI_API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                console.error('Gemini API error response:', errorData);
+                throw new Error(`Gemini API request failed with status ${response.status}: ${errorData.error?.message || response.statusText}`);
+            }
+
+            const result = await response.json();
+
+            let summary = 'My circuits are currently experiencing a comedic malfunction. Try again later!'; // Updated error message
+            if (result.candidates && result.candidates.length > 0 &&
+                result.candidates[0].content && result.candidates[0].content.parts &&
+                result.candidates[0].content.parts.length > 0) {
+                summary = result.candidates[0].content.parts[0].text;
+            } else {
+                console.warn('Unexpected Gemini API response structure:', result);
+            }
+
+            // Edit the "thinking..." message with the summary
+            await thinkingMessage.edit(`**TLDR of the last ${fetchedMessages.size} messages:**\n\n${summary}`); // Updated response prefix
+            console.log(`Successfully summarized conversation for ${message.channel.name}`);
+
+        } catch (error) {
+            console.error('Error during summarization:', error);
+            await thinkingMessage.edit(`My humor circuits are on the fritz: ${error.message}`); // Updated error message
         }
     }
 });
