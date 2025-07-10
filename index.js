@@ -36,6 +36,7 @@ const wordCounts = {};
 // Map to store cooldowns: guildId -> (userId -> last_command_timestamp)
 const cooldowns = new Map(); // Changed to store cooldowns per guild
 const COOLDOWN_SECONDS = 60; // Cooldown period in seconds
+const ELI5_COOLDOWN_SECONDS = 30; // Shorter cooldown for ELI5
 // --- END COOLDOWN CONFIGURATION ---
 
 
@@ -57,6 +58,36 @@ client.once(Events.ClientReady, c => {
     console.log(`Ready! Logged in as ${c.user.tag}`);
 });
 
+// Helper function for cooldown check
+async function applyCooldown(message, commandName, cooldownTimeSeconds) {
+    const userId = message.author.id;
+    const now = Date.now();
+    let userCooldowns;
+
+    if (message.guild) { // Per-guild cooldown
+        const guildId = message.guild.id;
+        if (!cooldowns.has(guildId)) {
+            cooldowns.set(guildId, new Map());
+        }
+        userCooldowns = cooldowns.get(guildId);
+    } else { // Global cooldown for DMs
+        userCooldowns = cooldowns; // Use the main map directly for DMs
+    }
+
+    const lastUsed = userCooldowns.get(userId);
+
+    if (lastUsed && (now - lastUsed < cooldownTimeSeconds * 1000)) {
+        const timeLeft = Math.ceil((cooldownTimeSeconds * 1000 - (now - lastUsed)) / 1000);
+        await message.reply(`bro chill :emoji_51: (Cooldown: ${timeLeft}s for !${commandName})`);
+        console.log(`User ${message.author.tag} is on cooldown for !${commandName}.`);
+        return true; // Cooldown active
+    }
+
+    userCooldowns.set(userId, now);
+    return false; // No cooldown
+}
+
+
 // Event listener for when a message is created
 client.on(Events.MessageCreate, async message => {
     // Ignore messages from other bots to prevent infinite loops
@@ -77,103 +108,64 @@ client.on(Events.MessageCreate, async message => {
     }
     // --- END WORD TRACKER LOGIC ---
 
-    // --- Command for Summarization ---
-    // We'll use a simple prefix command for now (e.g., "!tldr")
-    // You could also implement slash commands for a more modern Discord experience.
-    if (message.content.toLowerCase().startsWith('!tldr')) {
-        // --- BLACKLIST CHECK (MOVED INSIDE COMMAND BLOCK) ---
+    // --- BLACKLIST CHECK (for any command) ---
+    if (message.content.toLowerCase().startsWith('!')) { // Only check if it's a command
         if (BLACKLISTED_USER_IDS.includes(message.author.id)) {
-            // If the user is blacklisted AND used the command, reply with a clown emoji and stop processing
             try {
-                await message.reply('🤡'); // Reply with a clown emoji
-                console.log(`Blacklisted user ${message.author.tag} attempted to use the bot command.`);
+                await message.reply('🤡');
+                console.log(`Blacklisted user ${message.author.tag} attempted to use a bot command.`);
             } catch (error) {
                 console.error(`Error replying to blacklisted user:`, error);
             }
-            return; // Stop further processing for blacklisted users
+            return;
         }
-        // --- END BLACKLIST CHECK ---
+    }
+    // --- END BLACKLIST CHECK ---
 
-        // --- COOLDOWN CHECK (PER USER, PER SERVER) ---
-        if (!message.guild) { // If it's a DM, apply global cooldown
-            const userId = message.author.id;
-            const now = Date.now();
-            const lastUsed = cooldowns.get(userId); // Using the main cooldowns map for DMs
-
-            if (lastUsed && (now - lastUsed < COOLDOWN_SECONDS * 1000)) {
-                await message.reply(`bro chill :emoji_51:`); // Cooldown message for DMs
-                console.log(`User ${message.author.tag} is on cooldown for !tldr in DM.`);
-                return;
-            }
-            cooldowns.set(userId, now); // Set cooldown for DM
-        } else { // If it's in a guild (server)
-            const guildId = message.guild.id;
-            const userId = message.author.id;
-            const now = Date.now();
-
-            if (!cooldowns.has(guildId)) {
-                cooldowns.set(guildId, new Map());
-            }
-            const userCooldownsInGuild = cooldowns.get(guildId);
-            const lastUsed = userCooldownsInGuild.get(userId);
-
-            if (lastUsed && (now - lastUsed < COOLDOWN_SECONDS * 1000)) {
-                await message.reply(`bro chill :emoji_51:`); // Cooldown message for guilds
-                console.log(`User ${message.author.tag} is on cooldown for !tldr in guild ${message.guild.name}.`);
-                return;
-            }
-            userCooldownsInGuild.set(userId, now); // Set cooldown for guild
+    // --- Command for Summarization ---
+    if (message.content.toLowerCase().startsWith('!tldr')) {
+        if (await applyCooldown(message, 'tldr', COOLDOWN_SECONDS)) {
+            return; // Cooldown is active
         }
-        // --- END COOLDOWN CHECK ---
 
-        // Acknowledge the command immediately to let the user know the bot is working
-        const thinkingMessage = await message.channel.send('Thinking... distilling the essence of chaos into digestible nuggets.'); // Updated thinking message
+        const thinkingMessage = await message.channel.send('Thinking... distilling the essence of chaos into digestible nuggets.');
 
         try {
-            // Determine how many messages to fetch (default to 50 if not specified)
             const args = message.content.split(' ');
-            let messageCount = 50; // Default number of messages to summarize
+            let messageCount = 50;
             if (args.length > 1 && !isNaN(parseInt(args[1]))) {
-                messageCount = Math.min(parseInt(args[1]), 100); // Limit to a maximum of 100 messages to avoid very long prompts
+                messageCount = Math.min(parseInt(args[1]), 100);
             }
 
-            // Fetch recent messages from the channel
-            // The `before` option ensures we don't include the command itself in the summary
             const fetchedMessages = await message.channel.messages.fetch({ limit: messageCount, before: message.id });
 
-            // Filter out messages from bots and format them for the LLM prompt
             const conversation = fetchedMessages
-                .filter(msg => !msg.author.bot) // Exclude bot messages from the conversation
+                .filter(msg => !msg.author.bot)
                 .map(msg => `${msg.author.username}: ${msg.content}`)
-                .reverse() // Reverse to get chronological order for the LLM
+                .reverse()
                 .join('\n');
 
             if (!conversation) {
-                // Corrected syntax for the string literal
-                await thinkingMessage.edit(`Looks like everyone's been quiet. Nothing to summarize here!`); // Fix: Using backticks for string
+                await thinkingMessage.edit(`Looks like everyone's been quiet. Nothing to summarize here!`);
                 return;
             }
 
-            // --- Dynamic Prompt Selection for Humor ---
             let prompt = '';
-            // New probabilities: 10% Disney-flavored witty, 45% /pol/ humor, 45% Reddit humor
             const humorRoll = Math.random();
 
-            if (humorRoll < 0.1) { // Disney-flavored witty (10%) - Less frequent, more subtle
+            if (humorRoll < 0.1) {
                 prompt = `Please summarize the following Discord conversation in 2-3 concise bullet points (TLDR style), with a witty, chill, and slightly mischievous tone. Occasionally weave in subtle, clever references to classic animated films or their underlying themes, but keep it sharp and to the point. Ensure you refer to participants by their Discord username. Imagine a clever observer who just happens to enjoy animated classics.`;
-            } else if (humorRoll < 0.55) { // Edgy/4chan /pol/ humor (45%)
+            } else if (humorRoll < 0.55) {
                 prompt = `Please summarize the following Discord conversation in 2-3 concise bullet points (TLDR style), with a dry, cynical, and provocatively centrist tone. Act as a devil's advocate, dissecting arguments from all sides, highlighting logical fallacies, perceived absurdities, and inconvenient truths, without favoring any particular political extreme. Ensure you refer to participants by their Discord username. Keep it witty, a bit rude, and troll-y, but remain chill. Avoid explicit slurs or hate speech.`;
-            } else { // Reddit-type humor (45%)
+            } else {
                 prompt = `Please summarize the following Discord conversation in 2-3 concise bullet points (TLDR style), with a self-aware, ironic, and dry tone, like a top-tier Reddit comment. Use subtle internet culture references and inside jokes. Ensure you refer to participants by their Discord username. Be witty, a little rude, and troll-y, but ultimately chill. Maybe even drop an unpopular opinion or two, just for the lulz.`;
             }
-            // The actual conversation to summarize is appended after the prompt.
 
-            // Make the API call to the Gemini LLM
             const payload = {
-                contents: [{ role: "user", parts: [{ text: prompt + `\n\n${conversation}` }] }], // Append conversation here
+                contents: [{ role: "user", parts: [{ text: prompt + `\n\n${conversation}` }] }],
                 generationConfig: {
-                    temperature: 0.9, // Increased temperature for more creative/humorous output
-                    maxOutputTokens: 150, // Increased to allow for 2-3 brief bullet points
+                    temperature: 0.9,
+                    maxOutputTokens: 100,
                 },
             };
 
@@ -189,10 +181,9 @@ client.on(Events.MessageCreate, async message => {
                 throw new Error(`Gemini API request failed with status ${response.status}: ${errorData.error?.message || response.statusText}`);
             }
 
-            // FIX: Await the response.json() call
-            const result = await response.json(); // Changed this line
+            const result = await response.json();
 
-            let summary = 'My circuits are currently experiencing a comedic malfunction. Try again later!'; // Updated error message
+            let summary = 'My circuits are currently experiencing a comedic malfunction. Try again later!';
             if (result.candidates && result.candidates.length > 0 &&
                 result.candidates[0].content && result.candidates[0].content.parts &&
                 result.candidates[0].content.parts.length > 0) {
@@ -201,16 +192,72 @@ client.on(Events.MessageCreate, async message => {
                 console.warn('Unexpected Gemini API response structure:', result);
             }
 
-            // Edit the "thinking-" message with the summary
-            // Removed extra newline characters to make bullets start immediately
-            await thinkingMessage.edit(`**TLDR of the last ${fetchedMessages.size} messages:**\n${summary}`); // Changed from \n\n to \n
+            await thinkingMessage.edit(`**TLDR of the last ${fetchedMessages.size} messages:**\n${summary}`);
             console.log(`Successfully summarized conversation for ${message.channel.name}`);
 
         } catch (error) {
             console.error('Error during summarization:', error);
-            await thinkingMessage.edit(`My humor circuits are on the fritz: ${error.message}`); // Updated error message
+            await thinkingMessage.edit(`My humor circuits are on the fritz: ${error.message}`);
         }
     }
+    // --- NEW COMMAND: ELI5 ---
+    else if (message.content.toLowerCase().startsWith('!eli5')) {
+        if (await applyCooldown(message, 'eli5', ELI5_COOLDOWN_SECONDS)) {
+            return; // Cooldown is active
+        }
+
+        const content = message.content.substring('!eli5'.length).trim();
+        if (!content) {
+            await message.reply('What do you want me to explain like you\'re 5? Give me something to work with, buttercup.');
+            return;
+        }
+
+        // Updated thinking message for ELI5 to match personality
+        const thinkingMessage = await message.channel.send('Alright, buttercup, let\'s break this down without melting my circuits...');
+
+        try {
+            // MODIFIED ELI5 PROMPT for personality
+            const prompt = `Explain "${content}" like I'm 5 years old, but do it with a witty, snarky, and slightly troll-y tone. Use simple words and analogies a child would understand, but don't hold back on the subtle jabs or ironic observations. Keep the explanation to 1-2 short sentences.`;
+
+            const payload = {
+                contents: [{ role: "user", parts: [{ text: prompt }] }],
+                generationConfig: {
+                    temperature: 0.8, // Slightly higher temperature for personality, but not too wild for explanations
+                    maxOutputTokens: 70, // Short and sweet, but complete thoughts
+                },
+            };
+
+            const response = await fetch(GEMINI_API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                console.error('Gemini API error response for ELI5:', errorData);
+                throw new Error(`Gemini API request failed with status ${response.status}: ${errorData.error?.message || response.statusText}`);
+            }
+
+            const result = await response.json();
+            let explanation = 'Uh oh, my brain is too big for this simple concept right now. Maybe you\'re the one who needs explaining.'; // Updated error message for personality
+            if (result.candidates && result.candidates.length > 0 &&
+                result.candidates[0].content && result.candidates[0].content.parts &&
+                result.candidates[0].content.parts.length > 0) {
+                explanation = result.candidates[0].content.parts[0].text;
+            } else {
+                console.warn('Unexpected Gemini API response structure for ELI5:', result);
+            }
+
+            await thinkingMessage.edit(`**ELI5:** ${explanation}`);
+            console.log(`Successfully explained "${content}" for ${message.author.tag}.`);
+
+        } catch (error) {
+            console.error('Error during ELI5 summarization:', error);
+            await thinkingMessage.edit(`My simple-explanation circuits are on the fritz, probably because your question was too dumb: ${error.message}`); // Updated error message for personality
+        }
+    }
+    // --- END NEW COMMAND ---
     // --- NEW COMMAND: Display Word Scoreboard ---
     else if (message.content.toLowerCase() === '!scoreboard') {
         let scoreboardMessage = `**"${WORD_TO_TRACK}" Scoreboard:**\n`;
