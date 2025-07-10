@@ -13,6 +13,15 @@ import 'dotenv/config';
 // The GEMINI_API_KEY must be set in your local .env file when running the bot locally.
 const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY || ""}`;
 
+// --- BLACKLIST CONFIGURATION ---
+// To blacklist a user, add their Discord User ID to this array.
+// You can get a user's ID by enabling Developer Mode in Discord settings (User Settings > Advanced > Developer Mode),
+// then right-clicking on their username and selecting "Copy ID".
+const BLACKLISTED_USER_IDS = [
+     '718505488202989678', 
+];
+// --- END BLACKLIST CONFIGURATION ---
+
 // Create a new Discord client instance
 // We specify the intents our bot needs. Intents tell Discord which events your bot wants to receive.
 const client = new Client({
@@ -38,6 +47,19 @@ client.on(Events.MessageCreate, async message => {
 
     // Log the message content to the console for debugging (commented out for less console spam)
     // console.log(`Received message: "${message.content}" from ${message.author.tag}`);
+
+    // --- BLACKLIST CHECK ---
+    if (BLACKLISTED_USER_IDS.includes(message.author.id)) {
+        // If the user is blacklisted, reply with a clown emoji and stop processing
+        try {
+            await message.reply('🤡'); // Reply with a clown emoji
+            console.log(`Blacklisted user ${message.author.tag} attempted to use the bot.`);
+        } catch (error) {
+            console.error(`Error replying to blacklisted user:`, error);
+        }
+        return; // Stop further processing for blacklisted users
+    }
+    // --- END BLACKLIST CHECK ---
 
     // --- Command for Summarization ---
     // We'll use a simple prefix command for now (e.g., "!tldr")
@@ -106,7 +128,7 @@ client.on(Events.MessageCreate, async message => {
                 throw new Error(`Gemini API request failed with status ${response.status}: ${errorData.error?.message || response.statusText}`);
             }
 
-            const result = await response.json();
+            const result = response.json();
 
             let summary = 'My circuits are currently experiencing a comedic malfunction. Try again later!'; // Updated error message
             if (result.candidates && result.candidates.length > 0 &&
