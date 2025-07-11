@@ -153,19 +153,18 @@ client.on(Events.MessageCreate, async message => {
             let prompt = '';
             const humorRoll = Math.random();
 
-            if (humorRoll < 0.1) {
-                prompt = `Please summarize the following Discord conversation in 2-3 concise bullet points (TLDR style), with a witty, chill, and slightly mischievous tone. Occasionally weave in subtle, clever references to classic animated films or their underlying themes, but keep it sharp and to the point. Ensure you refer to participants by their Discord username. Imagine a clever observer who just happens to enjoy animated classics.`;
-            } else if (humorRoll < 0.55) {
-                prompt = `Please summarize the following Discord conversation in 2-3 concise bullet points (TLDR style), with a dry, cynical, and provocatively centrist tone. Act as a devil's advocate, dissecting arguments from all sides, highlighting logical fallacies, perceived absurdities, and inconvenient truths, without favoring any particular political extreme. Ensure you refer to participants by their Discord username. Keep it witty, a bit rude, and troll-y, but remain chill. Avoid explicit slurs or hate speech.`;
-            } else {
-                prompt = `Please summarize the following Discord conversation in 2-3 concise bullet points (TLDR style), with a self-aware, ironic, and dry tone, like a top-tier Reddit comment. Use subtle internet culture references and inside jokes. Ensure you refer to participants by their Discord username. Be witty, a little rude, and troll-y, but ultimately chill. Maybe even drop an unpopular opinion or two, just for the lulz.`;
+            // Removed Disney humor, split /pol/ and Reddit evenly
+            if (humorRoll < 0.5) { // Edgy/4chan /pol/ humor (50%)
+                prompt = `Please summarize the following Discord conversation in 1-2 extremely concise bullet points (TLDR style). Ensure each point is a complete thought, even if very short. Use a dry, cynical, and provocatively centrist tone. Act as a devil's advocate, dissecting arguments from all sides, highlighting logical fallacies, perceived absurdities, and inconvenient truths, without favoring any particular political extreme. Ensure you refer to participants by their Discord username. Keep it witty, a bit rude, and troll-y, but remain chill. Avoid explicit slurs or hate speech.`;
+            } else { // Reddit-type humor (50%)
+                prompt = `Please summarize the following Discord conversation in 1-2 extremely concise bullet points (TLDR style). Ensure each point is a complete thought, even if very short. Use a self-aware, ironic, and dry tone, like a top-tier Reddit comment. Use subtle internet culture references and inside jokes, as well as historical jokes from World War 2 especially. Ensure you refer to participants by their Discord username. Be witty, a little rude, and troll-y. Maybe even drop an unpopular opinion or two, just for the lulz.`;
             }
 
             const payload = {
                 contents: [{ role: "user", parts: [{ text: prompt + `\n\n${conversation}` }] }],
                 generationConfig: {
                     temperature: 0.9,
-                    maxOutputTokens: 100,
+                    maxOutputTokens: 70, // Adjusted to allow for 1-2 complete, very concise bullet points
                 },
             };
 
@@ -212,18 +211,17 @@ client.on(Events.MessageCreate, async message => {
             return;
         }
 
-        // Updated thinking message for ELI5 to match personality
         const thinkingMessage = await message.channel.send('Alright, buttercup, let\'s break this down without melting my circuits...');
 
         try {
-            // MODIFIED ELI5 PROMPT for personality: factual, witty, snarky, troll-y, toxic
-            const prompt = `Explain "${content}" factually and clearly, as if you're explaining it to someone who probably won't get it anyway. Maintain a witty, snarky, and slightly troll-y tone. Be a little rude and toxic in your delivery, but keep it chill and concise, aiming for 2-3 sentences. Don't shy away from pointing out obvious flaws or basic misunderstandings, but avoid explicit slurs or hate speech.`;
+            // ELI5 PROMPT for personality: factual, witty, snarky, troll-y, toxic
+            const prompt = `Explain "${content}" factually and clearly, as if you're explaining it to someone who probably won't get it anyway. Maintain a witty, snarky, and slightly troll-y tone. Be a little rude and toxic in your delivery, but keep it chill and concise, aiming for 2-3 sentences. Don't shy away from pointing out obvious flaws or basic misunderstandings. `;
 
             const payload = {
                 contents: [{ role: "user", parts: [{ text: prompt }] }],
                 generationConfig: {
-                    temperature: 0.8, // Slightly higher temperature to encourage personality
-                    maxOutputTokens: 100, // Sufficient for 2-3 sentences
+                    temperature: 0.8,
+                    maxOutputTokens: 100,
                 },
             };
 
@@ -240,7 +238,7 @@ client.on(Events.MessageCreate, async message => {
             }
 
             const result = await response.json();
-            let explanation = 'Uh oh, my brain is too big for this simple concept right now. Maybe you\'re the one who needs explaining.'; // Updated error message for personality
+            let explanation = 'Uh oh, my brain is too big for this simple concept right now. Maybe you\'re the one who needs explaining.';
             if (result.candidates && result.candidates.length > 0 &&
                 result.candidates[0].content && result.candidates[0].content.parts &&
                 result.candidates[0].content.parts.length > 0) {
@@ -249,7 +247,6 @@ client.on(Events.MessageCreate, async message => {
                 console.warn('Unexpected Gemini API response structure for ELI5:', result);
             }
 
-            // Construct Wikipedia link
             const wikipediaLink = `https://en.wikipedia.org/wiki/${encodeURIComponent(content.replace(/ /g, '_'))}`;
 
             await thinkingMessage.edit(`**ELI5:** ${explanation}\n\nWant to know more? Check out: <${wikipediaLink}>`);
@@ -257,7 +254,7 @@ client.on(Events.MessageCreate, async message => {
 
         } catch (error) {
             console.error('Error during ELI5 summarization:', error);
-            await thinkingMessage.edit(`My simple-explanation circuits are on the fritz, probably because your question was too dumb: ${error.message}`); // Updated error message for personality
+            await thinkingMessage.edit(`My simple-explanation circuits are on the fritz, probably because your question was too dumb: ${error.message}`);
         }
     }
     // --- END NEW COMMAND ---
@@ -270,7 +267,6 @@ client.on(Events.MessageCreate, async message => {
             scoreboardMessage += 'No one has said the word yet. Get to it, losers!';
         } else {
             for (const userId of sortedUsers) {
-                // Fetch the user object to get their username
                 try {
                     const user = await client.users.fetch(userId);
                     scoreboardMessage += `${user.username}: ${wordCounts[userId]}\n`;
