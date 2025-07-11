@@ -155,16 +155,16 @@ client.on(Events.MessageCreate, async message => {
 
             // Removed Disney humor, split /pol/ and Reddit evenly
             if (humorRoll < 0.5) { // Edgy/4chan /pol/ humor (50%)
-                prompt = `Please summarize the following Discord conversation in 1-2 extremely concise bullet points (TLDR style). Ensure each point is a complete thought, even if very short. Use a dry, cynical, and provocatively centrist tone. Act as a devil's advocate, dissecting arguments from all sides, highlighting logical fallacies, perceived absurdities, and inconvenient truths, without favoring any particular political extreme. Ensure you refer to participants by their Discord username. Keep it witty, a bit rude, and troll-y, but remain chill. Swear/curse words are okay.`;
+                prompt = `Summarize the following Discord conversation in a few extremely concise, witty, rude, and troll-y sentences. For each key participant, provide one very short, funny comment about their contribution. Also, include 1-2 general snarky observations about the conversation as a whole. Do not use bullet points. Ensure all sentences are complete. Refer to participants by their Discord username. Act as a centrist devil's advocate, highlighting absurdities without explicit slurs or hate speech.`;
             } else { // Reddit-type humor (50%)
-                prompt = `Please summarize the following Discord conversation in 1-2 extremely concise bullet points (TLDR style). Ensure each point is a complete thought, even if very short. Use a self-aware, ironic, and dry tone, like a top-tier Reddit comment. Use subtle internet culture references and inside jokes, as well as historical jokes from World War 2 especially. Ensure you refer to participants by their Discord username. Be witty, a little rude, and troll-y. Maybe even drop an unpopular opinion or two, just for the lulz. Swear/curse words are okay.`;
+                prompt = `Summarize the following Discord conversation in a few extremely concise, witty, rude, and troll-y sentences. For each key participant, provide one very short, funny comment about their contribution. Also, include 1-2 general snarky observations about the conversation as a whole, using subtle internet culture references and inside jokes. Do not use bullet points. Ensure all sentences are complete. Refer to participants by their Discord username. Be chill, but don't shy away from unpopular opinions.`;
             }
 
             const payload = {
                 contents: [{ role: "user", parts: [{ text: prompt + `\n\n${conversation}` }] }],
                 generationConfig: {
                     temperature: 0.9,
-                    maxOutputTokens: 70, // Adjusted to allow for 1-2 complete, very concise bullet points
+                    maxOutputTokens: 120, // Increased to allow for more complete sentences and comments
                 },
             };
 
@@ -191,7 +191,8 @@ client.on(Events.MessageCreate, async message => {
                 console.warn('Unexpected Gemini API response structure:', result);
             }
 
-            await thinkingMessage.edit(`**TLDR of the last ${fetchedMessages.size} messages:**\n${summary}`);
+            // Removed extra newline characters to make bullets start immediately
+            await thinkingMessage.edit(`**TLDR of the last ${fetchedMessages.size} messages:**\n${summary.trim()}`); // Trim to remove any leading/trailing whitespace
             console.log(`Successfully summarized conversation for ${message.channel.name}`);
 
         } catch (error) {
@@ -215,7 +216,7 @@ client.on(Events.MessageCreate, async message => {
 
         try {
             // ELI5 PROMPT for personality: factual, witty, snarky, troll-y, toxic
-            const prompt = `Explain "${content}" factually and clearly, as if you're explaining it to someone who probably won't get it anyway. Maintain a witty, snarky, and slightly troll-y tone. Be a little rude and toxic in your delivery, but keep it chill and concise, aiming for 2-3 sentences. Don't shy away from pointing out obvious flaws or basic misunderstandings. `;
+            const prompt = `Explain "${content}" factually and clearly, as if you're explaining it to someone who probably won't get it anyway. Maintain a witty, snarky, and slightly troll-y tone. Be a little rude and toxic in your delivery, but keep it chill and concise, aiming for 2-3 sentences. Don't shy away from pointing out obvious flaws or basic misunderstandings, but avoid explicit slurs or hate speech.`;
 
             const payload = {
                 contents: [{ role: "user", parts: [{ text: prompt }] }],
