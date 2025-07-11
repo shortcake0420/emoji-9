@@ -216,14 +216,14 @@ client.on(Events.MessageCreate, async message => {
         const thinkingMessage = await message.channel.send('Alright, buttercup, let\'s break this down without melting my circuits...');
 
         try {
-            // MODIFIED ELI5 PROMPT for personality and factual explanation for 13-year-olds
-            const prompt = `Explain "${content}" factually and clearly, as if you're explaining it to a curious 13-year-old. Maintain a witty, snarky, and slightly troll-y tone. Keep the explanation concise, aiming for 2-3 sentences.`;
+            // MODIFIED ELI5 PROMPT for personality: factual, witty, snarky, troll-y, toxic
+            const prompt = `Explain "${content}" factually and clearly, as if you're explaining it to someone who probably won't get it anyway. Maintain a witty, snarky, and slightly troll-y tone. Be a little rude and toxic in your delivery, but keep it chill and concise, aiming for 2-3 sentences. Don't shy away from pointing out obvious flaws or basic misunderstandings, but avoid explicit slurs or hate speech.`;
 
             const payload = {
                 contents: [{ role: "user", parts: [{ text: prompt }] }],
                 generationConfig: {
-                    temperature: 0.7, // Keep it less creative for factual explanations
-                    maxOutputTokens: 100, // Increased for slightly longer, more factual explanation
+                    temperature: 0.8, // Slightly higher temperature to encourage personality
+                    maxOutputTokens: 100, // Sufficient for 2-3 sentences
                 },
             };
 
@@ -257,7 +257,7 @@ client.on(Events.MessageCreate, async message => {
 
         } catch (error) {
             console.error('Error during ELI5 summarization:', error);
-            await thinkingMessage.edit(`Whoever said there's no such thing as a dumb question lied to you: ${error.message}`); // Updated error message for personality
+            await thinkingMessage.edit(`My simple-explanation circuits are on the fritz, probably because your question was too dumb: ${error.message}`); // Updated error message for personality
         }
     }
     // --- END NEW COMMAND ---
