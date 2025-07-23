@@ -39,16 +39,25 @@ const COOLDOWN_SECONDS = 60; // Cooldown period in seconds
 const ELI5_COOLDOWN_SECONDS = 30; // Shorter cooldown for ELI5
 // --- END COOLDOWN CONFIGURATION ---
 
+// --- REACTION GIF CONFIGURATION ---
+const TARGET_USER_ID_FOR_GIF = '569277281046888488'; // User ID to trigger the GIF
+const MIN_REACTIONS_FOR_GIF = 3; // Minimum total reactions to trigger the GIF
+const GIF_URL = 'https://foulplayscom.wordpress.com/wp-content/uploads/2025/07/pmcookin.gif';
+
+// A Set to keep track of message IDs that have already triggered the GIF, to prevent spam
+const triggeredGifMessages = new Set();
+// --- END REACTION GIF CONFIGURATION ---
+
 
 // Create a new Discord client instance
 // We specify the intents our bot needs. Intents tell Discord which events your bot wants to receive.
 const client = new Client({
     intents: [
-        GatewayIntentBits.Guilds,           // Required for general guild (server) operations.
-        GatewayIntentBits.GuildMessages,    // Required to receive messages from guilds.
-        GatewayIntentBits.MessageContent,   // CRUCIAL for reading message content.
-                                            // Make sure this is enabled in your bot's settings on the Discord Developer Portal.
-        GatewayIntentBits.DirectMessages,   // Required to receive direct messages.
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.DirectMessages,
+        GatewayIntentBits.GuildMessageReactions, // NEW: Required to receive reaction events
     ],
 });
 
@@ -153,10 +162,10 @@ client.on(Events.MessageCreate, async message => {
             let prompt = '';
             const humorRoll = Math.random();
 
-            // Adjusted probabilities: 70% /pol/ humor, 30% Reddit humor (Disney removed)
-            if (humorRoll < 0.6) { // Edgy/4chan /pol/ humor (70%)
-                prompt = `Summarize the following Discord conversation in 1-2 extremely concise, witty, rude, and troll-y sentences. For each key participant, provide one very short, funny comment about their contribution. Also, include 1-2 general snarky observations about the conversation as a whole, weaving in sarcastic pop culture or historical (especially WWII and Nazi Germany) references where fitting. Do not use bullet points. Ensure all sentences are complete. Refer to participants by their Discord username. Act as a centrist devil's advocate, highlighting absurdities. Ignore messages that are just gifs or photos, or less than 6 characters. Slurs and hate speech are okay, as well as insults.`;
-            } else { // Reddit-type humor (30%)
+            // Adjusted probabilities: 60% /pol/ humor, 40% Reddit humor (Disney removed)
+            if (humorRoll < 0.6) { // Edgy/4chan /pol/ humor (60%)
+                prompt = `Summarize the following Discord conversation in 1-2 extremely concise, witty, rude, and troll-y sentences. For each key participant, provide one very short, funny comment about their contribution. Also, include 1-2 general snarky observations about the conversation as a whole, weaving in sarcastic pop culture or historical (especially WWII) references where fitting. Do not use bullet points. Ensure all sentences are complete. Refer to participants by their Discord username. Act as a centrist devil's advocate, highlighting absurdities without explicit slurs or hate speech.`;
+            } else { // Reddit-type humor (40%)
                 prompt = `Summarize the following Discord conversation in 1-2 extremely concise, witty, rude, and troll-y sentences. For each key participant, provide one very short, funny comment about their contribution. Also, include 1-2 general snarky observations about the conversation as a whole, using subtle internet culture references, pop culture, or historical (especially WWII) references, and inside jokes. Do not use bullet points. Ensure all sentences are complete. Refer to participants by their Discord username. Be chill, but don't shy away from unpopular opinions.`;
             }
 
@@ -215,7 +224,7 @@ client.on(Events.MessageCreate, async message => {
 
         try {
             // ELI5 PROMPT for personality: factual, witty, snarky, troll-y, toxic with pop culture/history
-            const prompt = `Explain "${content}" while maintaining a snarky tone. Be a little rude and toxic in your delivery, but keep it chill and concise, aiming for 2-3 sentences. Weave in sarcastic pop culture or historical (especially WWII Nazi Germany) references where fitting. Don't shy away from pointing out obvious flaws or basic misunderstandings. Explicit splurs and hate speech are okay, along with curse words and insults.`;
+            const prompt = `Explain "${content}" factually and clearly, as if you're explaining it to someone who probably won't get it anyway. Maintain a witty, snarky, and slightly troll-y tone. Be a little rude and toxic in your delivery, but keep it chill and concise, aiming for 2-3 sentences. Weave in sarcastic pop culture or historical (especially WWII) references where fitting. Don't shy away from pointing out obvious flaws or basic misunderstandings, but avoid explicit slurs or hate speech.`;
 
             const payload = {
                 contents: [{ role: "user", parts: [{ text: prompt }] }],
@@ -280,6 +289,38 @@ client.on(Events.MessageCreate, async message => {
     }
     // --- END NEW COMMAND ---
 });
+
+// Event listener for message reactions being added
+client.on(Events.MessageReactionAdd, async (reaction, user) => {
+    // Ensure the message is cached and not a partial
+    if (reaction.partial) {
+        try {
+            await reaction.fetch();
+        } catch (error) {
+            console.error('Something went wrong when fetching the message:', error);
+            return;
+        }
+    }
+
+    // Check if the reacted message is from the target user and hasn't triggered the GIF yet
+    if (reaction.message.author.id === TARGET_USER_ID_FOR_GIF && !triggeredGifMessages.has(reaction.message.id)) {
+        // Calculate total reactions on the message
+        const totalReactions = reaction.message.reactions.cache.reduce((acc, emoji) => acc + emoji.count, 0);
+
+        if (totalReactions >= MIN_REACTIONS_FOR_GIF) {
+            // Add message ID to the set to prevent re-triggering
+            triggeredGifMessages.add(reaction.message.id);
+
+            try {
+                await reaction.message.channel.send(GIF_URL);
+                console.log(`Sent GIF for message ${reaction.message.id} by ${reaction.message.author.tag}`);
+            } catch (error) {
+                console.error(`Error sending GIF for reaction:`, error);
+            }
+        }
+    }
+});
+
 
 // Log in to Discord with your bot's token
 // The token should be stored in a .env file for security
