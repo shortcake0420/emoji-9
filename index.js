@@ -1,17 +1,34 @@
 import { Client, Events, GatewayIntentBits, Partials, EmbedBuilder } from 'discord.js';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously } from 'firebase/auth';
+import { getFirestore, doc, setDoc, getDocs, collection, increment } from 'firebase/firestore';
 import 'dotenv/config';
 
-// --- CONFIGURATION ---
+// --- DATABASE SETUP ---
+const firebaseConfig = JSON.parse(process.env.FIREBASE_CONFIG || '{}');
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+// Using your specific Firebase Project ID as the appId in the path
+const appId = 'cliffbot-f45b0'; 
+
+let dbReady = false;
+
+// Authenticate anonymously
+signInAnonymously(auth)
+    .then(() => {
+        console.log("Database Authenticated and Ready.");
+        dbReady = true;
+    })
+    .catch(err => {
+        console.error("Database Auth Failed:", err);
+    });
+
+// --- BOT CONFIG ---
 const BLACKLISTED_USER_IDS = ['718505488202989678', '787804741924159488'];
 const WORD_TO_TRACK = 'nigger';
-const wordCounts = {};
-const emojiUsage = {};
-
-// Reaction GIF Config
-const TARGET_USER_ID_FOR_GIF = '569277281046888488';
-const MIN_REACTIONS_FOR_GIF = 3;
-const GIF_URL = 'https://foulplayscom.wordpress.com/wp-content/uploads/2025/07/pmcookin.gif';
-const triggeredGifMessages = new Set();
+const TARGET_EMOJI_NAME = 'emoji_9'; // Specifically tracking this one
 
 const client = new Client({
     intents: [
@@ -29,175 +46,165 @@ client.once(Events.ClientReady, c => {
 });
 
 client.on(Events.MessageCreate, async message => {
-    if (message.author.bot) return;
+    if (message.author.bot || !dbReady) return;
 
     const content = message.content.toLowerCase();
 
-    // Word Tracking (Slur Counter)
+    // 1. Word Tracking (Nigger)
     if (content.includes(WORD_TO_TRACK)) {
-        wordCounts[message.author.id] = (wordCounts[message.author.id] || 0) + 1;
+        const userDoc = doc(db, 'artifacts', appId, 'public', 'data', 'wordCounts', message.author.id);
+        try {
+            await setDoc(userDoc, { 
+                count: increment(1), 
+                username: message.author.username 
+            }, { merge: true });
+        } catch (e) {
+            console.error("Error saving word count:", e);
+        }
     }
 
-    // Blacklist check
+    // 2. Specific Emoji Tracking (Text-based usage)
+    if (message.content.includes(TARGET_EMOJI_NAME)) {
+        const userEmojiDoc = doc(db, 'artifacts', appId, 'public', 'data', 'emoji9Leaderboard', message.author.id);
+        try {
+            await setDoc(userEmojiDoc, {
+                count: increment(1),
+                username: message.author.username
+            }, { merge: true });
+        } catch (e) {
+            console.error("Error saving emoji usage:", e);
+        }
+    }
+
+    // 3. Blacklist check
     if (content.startsWith('!') && BLACKLISTED_USER_IDS.includes(message.author.id)) {
         return message.reply('🤡');
     }
 
-    // --- UTILITY COMMANDS ---
+    // --- COMMANDS ---
 
-    // 1. !urban <word> - Urban Dictionary
-    if (content.startsWith('!urban')) {
-        const term = message.content.slice(7).trim();
-        if (!term) return message.reply("Give me a word to look up, I'm not psychic.");
-        
+    // !nigger - Nigger rankings
+    if (content === '!scoreboard') {
         try {
-            const response = await fetch(`https://api.urbandictionary.com/v0/define?term=${encodeURIComponent(term)}`);
-            const data = await response.json();
-            const entry = data.list[0];
-
-            if (!entry) return message.reply("Not even the degenerates at Urban Dictionary have a definition for that.");
-
-            const embed = new EmbedBuilder()
-                .setTitle(`Urban Dictionary: ${term}`)
-                .setURL(entry.permalink)
-                .setColor(0xEFF000)
-                .addFields(
-                    { name: 'Definition', value: entry.definition.substring(0, 1000).replace(/[\[\]]/g, '') },
-                    { name: 'Example', value: entry.example.substring(0, 1000).replace(/[\[\]]/g, '') || 'No example provided.' }
-                )
-                .setFooter({ text: `👍 ${entry.thumbs_up} | 👎 ${entry.thumbs_down}` });
-
-            return message.channel.send({ embeds: [embed] });
+            const querySnapshot = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'wordCounts'));
+            const scores = [];
+            querySnapshot.forEach(doc => scores.push(doc.data()));
+            
+            scores.sort((a, b) => b.count - a.count);
+            
+            let sb = `**"${WORD_TO_TRACK}" Rankings:**\n`;
+            if (scores.length === 0) {
+                sb += "Nobody is nigging yet.";
+            } else {
+                scores.slice(0, 10).forEach((s, i) => {
+                    sb += `${i + 1}. **${s.username}**: ${s.count}\n`;
+                });
+            }
+            return message.channel.send(sb);
         } catch (e) {
-            return message.reply("Slang fetch failed. Error 404: Coolness not found.");
+            return message.reply("Failed to fetch scoreboard.");
         }
     }
 
-    // 2. !price <crypto> - CoinGecko Prices
-    if (content.startsWith('!price')) {
-        const coin = message.content.slice(7).trim() || 'bitcoin';
+    // !emoji9 - Dedicated Emoji 9 Leaderboard
+    if (content === '!emoji9') {
         try {
-            const response = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${coin}&vs_currencies=usd&include_24hr_change=true`);
-            const data = await response.json();
+            const querySnapshot = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'emoji9Leaderboard'));
+            const scores = [];
+            querySnapshot.forEach(doc => scores.push(doc.data()));
             
-            if (!data[coin]) return message.reply(`Never heard of "${coin}". Is that a real coin or a Ponzi scheme?`);
-
-            const price = data[coin].usd;
-            const change = data[coin].usd_24h_change.toFixed(2);
-            const color = change >= 0 ? 0x00FF00 : 0xFF0000;
+            scores.sort((a, b) => b.count - a.count);
 
             const embed = new EmbedBuilder()
-                .setTitle(`${coin.toUpperCase()} / USD`)
-                .setColor(color)
-                .addFields(
-                    { name: 'Price', value: `$${price.toLocaleString()}`, inline: true },
-                    { name: '24h Change', value: `${change}%`, inline: true }
-                )
+                .setTitle(`:${TARGET_EMOJI_NAME}: Top Users`)
+                .setDescription("Rankings based on reacts and message usage.")
+                .setColor(0xFFA500)
                 .setTimestamp();
 
+            if (scores.length === 0) {
+                embed.setDescription("No one has used this emoji enough to be ranked.");
+            } else {
+                const list = scores.slice(0, 10).map((s, i) => `**${i + 1}. ${s.username}**: ${s.count}`).join('\n');
+                embed.setDescription(list);
+            }
             return message.channel.send({ embeds: [embed] });
         } catch (e) {
-            return message.reply("Failed to check the ticker. Market is probably crashing anyway.");
+            return message.reply("Failed to fetch emoji leaderboard.");
         }
     }
 
-    // 3. !odds <sport> - Live Betting Lines (The Odds API v4)
-    if (content.startsWith('!odds')) {
-        const apiKey = process.env.ODDS_API_KEY;
-        if (!apiKey) return message.reply("I need the `ODDS_API_KEY` set in Render to do this.");
-
-        const sport = message.content.slice(6).trim() || 'americanfootball_nfl';
-        // v4 endpoint
-        const url = `https://api.the-odds-api.com/v4/sports/${sport}/odds/?apiKey=${apiKey}&regions=us&markets=h2h&oddsFormat=american`;
-
+    // !emojistats - Global stats
+    if (content === '!emojistats') {
         try {
-            const response = await fetch(url);
-            const data = await response.json();
+            const querySnapshot = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'emojiUsage'));
+            const emojis = [];
+            querySnapshot.forEach(doc => emojis.push({ id: doc.id, ...doc.data() }));
 
-            if (!Array.isArray(data) || data.length === 0) {
-                return message.reply("No live lines for that sport. Try `americanfootball_nfl` or `basketball_nba`.");
-            }
-
-            const game = data[0]; // Show the most immediate game
-            const bookie = game.bookmakers[0];
-            
-            if (!bookie) return message.reply("Found a game, but no bookies are taking bets on it yet.");
-
-            const market = bookie.markets.find(m => m.key === 'h2h');
-            const odds = market.outcomes;
+            emojis.sort((a, b) => b.count - a.count);
 
             const embed = new EmbedBuilder()
-                .setTitle(`Live Odds: ${game.sport_title}`)
-                .setDescription(`${game.home_team} vs ${game.away_team}`)
-                .setColor(0x00AAFF)
-                .addFields(
-                    { name: 'Bookmaker', value: bookie.title, inline: false },
-                    { name: odds[0].name, value: `Line: ${odds[0].price}`, inline: true },
-                    { name: odds[1].name, value: `Line: ${odds[1].price}`, inline: true }
-                )
-                .setFooter({ text: 'Bet responsibly. Or don\'t, it\'s your money.' });
+                .setTitle('Global Emoji Popularity')
+                .setColor(0x2B2D31)
+                .setTimestamp();
 
+            if (emojis.length === 0) {
+                embed.setDescription("No reactions tracked yet.");
+            } else {
+                const list = emojis.slice(0, 10).map(e => `${e.id} \`${e.count}\``).join('\n');
+                embed.setDescription(list);
+            }
             return message.channel.send({ embeds: [embed] });
         } catch (e) {
-            console.error(e);
-            return message.reply("The bookies blocked my call. Couldn't get the odds.");
+            return message.reply("Failed to fetch global emoji stats.");
         }
-    }
-
-    // 4. !emojistats - The Emoji Embed
-    if (content === '!emojistats') {
-        const sortedEmojis = Object.entries(emojiUsage).sort(([, a], [, b]) => b - a).slice(0, 10);
-        const statsEmbed = new EmbedBuilder()
-            .setTitle('Emoji Popularity Contest')
-            .setColor(0x2B2D31)
-            .setTimestamp();
-
-        if (sortedEmojis.length === 0) {
-            statsEmbed.setDescription("Nobody is reacting to anything. Ghost town.");
-        } else {
-            const list = sortedEmojis.map(([emoji, count]) => `${emoji} \`${count}\``).join('\n');
-            statsEmbed.setDescription(list);
-        }
-        return message.channel.send({ embeds: [statsEmbed] });
-    }
-
-    // 5. !nigger - The Word Counter
-    if (content === '!scoreboard') {
-        let sb = `**"${WORD_TO_TRACK}" Ranking:**\n`;
-        const sorted = Object.keys(wordCounts).sort((a, b) => wordCounts[b] - wordCounts[a]);
-        if (sorted.length === 0) sb += "Nobody's nigging today. Boring.";
-        else {
-            for (const uid of sorted) {
-                try {
-                    const u = await client.users.fetch(uid);
-                    sb += `**${u.username}**: ${wordCounts[uid]}\n`;
-                } catch (e) { sb += `Unknown (${uid}): ${wordCounts[uid]}\n`; }
-            }
-        }
-        return message.channel.send(sb);
     }
 });
 
-// Emoji Listeners
-client.on(Events.MessageReactionAdd, async (reaction) => {
+// Reaction Tracking
+client.on(Events.MessageReactionAdd, async (reaction, user) => {
+    if (!dbReady || user.bot) return;
     if (reaction.partial) try { await reaction.fetch(); } catch (e) { return; }
+    
     const key = reaction.emoji.id ? `<:${reaction.emoji.name}:${reaction.emoji.id}>` : reaction.emoji.name;
-    emojiUsage[key] = (emojiUsage[key] || 0) + 1;
+    const emojiDoc = doc(db, 'artifacts', appId, 'public', 'data', 'emojiUsage', key);
+    
+    try {
+        // Increment global usage
+        await setDoc(emojiDoc, { count: increment(1) }, { merge: true });
 
-    // PM Cooking GIF Logic
-    if (reaction.message.author.id === TARGET_USER_ID_FOR_GIF && !triggeredGifMessages.has(reaction.message.id)) {
-        const total = reaction.message.reactions.cache.reduce((acc, e) => acc + e.count, 0);
-        if (total >= MIN_REACTIONS_FOR_GIF) {
-            triggeredGifMessages.add(reaction.message.id);
-            reaction.message.channel.send(GIF_URL).catch(() => {});
+        // Specific tracking for emoji_9
+        if (reaction.emoji.name === TARGET_EMOJI_NAME) {
+            const userEmojiDoc = doc(db, 'artifacts', appId, 'public', 'data', 'emoji9Leaderboard', user.id);
+            await setDoc(userEmojiDoc, {
+                count: increment(1),
+                username: user.username
+            }, { merge: true });
         }
+    } catch (e) {
+        console.error("Error tracking reaction:", e);
     }
 });
 
-client.on(Events.MessageReactionRemove, async (reaction) => {
+client.on(Events.MessageReactionRemove, async (reaction, user) => {
+    if (!dbReady || user.bot) return;
     if (reaction.partial) try { await reaction.fetch(); } catch (e) { return; }
+    
     const key = reaction.emoji.id ? `<:${reaction.emoji.name}:${reaction.emoji.id}>` : reaction.emoji.name;
-    if (emojiUsage[key]) emojiUsage[key]--;
+    const emojiDoc = doc(db, 'artifacts', appId, 'public', 'data', 'emojiUsage', key);
+    
+    try {
+        await setDoc(emojiDoc, { count: increment(-1) }, { merge: true });
+
+        // Decrement user specific count if they remove the reaction
+        if (reaction.emoji.name === TARGET_EMOJI_NAME) {
+            const userEmojiDoc = doc(db, 'artifacts', appId, 'public', 'data', 'emoji9Leaderboard', user.id);
+            await setDoc(userEmojiDoc, {
+                count: increment(-1)
+            }, { merge: true });
+        }
+    } catch (e) {
+        console.error("Error removing reaction:", e);
+    }
 });
 
-client.login(process.env.DISCORD_TOKEN).catch(console.error);
+client.login(process.env.DISCORD_TOKEN);

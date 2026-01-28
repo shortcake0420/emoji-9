@@ -1,6 +1,6 @@
 {
   "name": "cliffsbot",
-  "type": "module", 
+  "type": "module",
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
@@ -12,6 +12,7 @@
   "description": "",
   "dependencies": {
     "discord.js": "^14.21.0",
-    "dotenv": "^17.2.0"
+    "dotenv": "^17.2.0",
+    "firebase": "^12.8.0"
   }
 }
