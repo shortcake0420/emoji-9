@@ -1,68 +1,50 @@
 // Import the necessary classes from the discord.js library
-// Client: The main class for interacting with the Discord API
-// Events: An enum containing all the events emitted by the Discord client
-// GatewayIntentBits: Used to specify which events your bot wants to receive from Discord
-import { Client, Events, GatewayIntentBits } from 'discord.js';
-
-// Load environment variables from a .env file
-// This is crucial for keeping sensitive information like your bot token and API key secure.
-// Make sure you have 'dotenv' installed: npm install dotenv
+import { Client, Events, GatewayIntentBits, Partials } from 'discord.js';
 import 'dotenv/config';
 
 // Define constants for the Gemini API
-// The GEMINI_API_KEY must be set in your local .env file when running the bot locally.
-const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY || ""}`;
+// CHANGED: Switched from gemini-2.0-flash to gemini-1.5-flash for better quota stability
+const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY || ""}`;
 
-// --- BLACKLIST CONFIGURATION ---
-// To blacklist a user, add their Discord User ID to this array.
-// You can get a user's ID by enabling Developer Mode in Discord settings (User Settings > Advanced > Developer Mode),
-// then right-clicking on their username and selecting "Copy ID".
+// --- CONFIGURATION ---
 const BLACKLISTED_USER_IDS = [
-    '718505488202989678', // Existing ID
-    '787804741924159488', // New ID added to blacklist
+    '718505488202989678', 
+    '787804741924159488',
 ];
-// --- END BLACKLIST CONFIGURATION ---
 
-// --- WORD TRACKER CONFIGURATION ---
-// Define the word you want to track (case-insensitive)
-const WORD_TO_TRACK = 'whining'; // Example word, change this to your desired word
-
-// Object to store word counts for each user (user ID -> count)
-// Note: This data will reset if the bot restarts. For persistent storage, a database would be needed.
+const WORD_TO_TRACK = 'whining';
 const wordCounts = {};
-// --- END WORD TRACKER CONFIGURATION ---
 
-// --- COOLDOWN CONFIGURATION ---
-// Map to store cooldowns: guildId -> (userId -> last_command_timestamp)
-const cooldowns = new Map(); // Changed to store cooldowns per guild
-const COOLDOWN_SECONDS = 60; // Cooldown period in seconds
-const ELI5_COOLDOWN_SECONDS = 30; // Shorter cooldown for ELI5
-// --- END COOLDOWN CONFIGURATION ---
+// --- EMOJI TRACKER CONFIGURATION ---
+// Object to store emoji usage counts (emoji name/id -> count)
+const emojiUsage = {};
+// --- END EMOJI TRACKER CONFIGURATION ---
+
+const cooldowns = new Map();
+const COOLDOWN_SECONDS = 60;
+const ELI5_COOLDOWN_SECONDS = 30;
+const HYPO_COOLDOWN_SECONDS = 45;
 
 // --- REACTION GIF CONFIGURATION ---
-const TARGET_USER_ID_FOR_GIF = '569277281046888488'; // User ID to trigger the GIF
-const MIN_REACTIONS_FOR_GIF = 3; // Minimum total reactions to trigger the GIF
+const TARGET_USER_ID_FOR_GIF = '569277281046888488';
+const MIN_REACTIONS_FOR_GIF = 3;
 const GIF_URL = 'https://foulplayscom.wordpress.com/wp-content/uploads/2025/07/pmcookin.gif';
-
-// A Set to keep track of message IDs that have already triggered the GIF, to prevent spam
 const triggeredGifMessages = new Set();
 // --- END REACTION GIF CONFIGURATION ---
 
-
-// Create a new Discord client instance
-// We specify the intents our bot needs. Intents tell Discord which events your bot wants to receive.
+// Create a new Discord client instance with Partials for reactions
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.DirectMessages,
-        GatewayIntentBits.GuildMessageReactions, // NEW: Required to receive reaction events
+        GatewayIntentBits.GuildMessageReactions,
     ],
+    // Partials allow the bot to see reactions on messages sent before it was online
+    partials: [Partials.Message, Partials.Reaction, Partials.User],
 });
 
-// Event listener for when the client is ready (bot has logged in)
-// The 'once' property means this event will only fire once when the bot starts
 client.once(Events.ClientReady, c => {
     console.log(`Ready! Logged in as ${c.user.tag}`);
 });
@@ -73,14 +55,14 @@ async function applyCooldown(message, commandName, cooldownTimeSeconds) {
     const now = Date.now();
     let userCooldowns;
 
-    if (message.guild) { // Per-guild cooldown
+    if (message.guild) {
         const guildId = message.guild.id;
         if (!cooldowns.has(guildId)) {
             cooldowns.set(guildId, new Map());
         }
         userCooldowns = cooldowns.get(guildId);
-    } else { // Global cooldown for DMs
-        userCooldowns = cooldowns; // Use the main map directly for DMs
+    } else {
+        userCooldowns = cooldowns;
     }
 
     const lastUsed = userCooldowns.get(userId);
@@ -88,54 +70,42 @@ async function applyCooldown(message, commandName, cooldownTimeSeconds) {
     if (lastUsed && (now - lastUsed < cooldownTimeSeconds * 1000)) {
         const timeLeft = Math.ceil((cooldownTimeSeconds * 1000 - (now - lastUsed)) / 1000);
         await message.reply(`bro chill :emoji_51: (Cooldown: ${timeLeft}s for !${commandName})`);
-        console.log(`User ${message.author.tag} is on cooldown for !${commandName}.`);
-        return true; // Cooldown active
+        return true;
     }
 
     userCooldowns.set(userId, now);
-    return false; // No cooldown
+    return false;
 }
 
+// Unified, Witty 90s/00s Persona Prompt Generator
+function getWittyPersonaPrompt(isTldr = true) {
+    const basePersona = `Act as a witty, sarcastic, and chill internet observer who lived through the 90s and 2000s. Refer to pop culture, tech history, and events from those decades (like dial-up, Napster, early social media, 90s fashion, music, or Y2K anxieties) to make observations. Maintain a snarky, devil's advocate attitude.`;
 
-// Event listener for when a message is created
+    if (isTldr) {
+        return `${basePersona} Summarize the following Discord conversation in 1-2 extremely concise sentences. For each key participant, provide one very short, funny, and sarcastic comment about their contribution. Also, include 1-2 general snarky observations about the conversation as a whole. Do not use bullet points. Ensure all sentences are complete. Refer to participants by their Discord username.`;
+    } else {
+        return `${basePersona} Generate a response that is witty, fun, and uses subtle sarcasm and relevant 90s/00s references to deliver the content.`;
+    }
+}
+
 client.on(Events.MessageCreate, async message => {
-    // Ignore messages from other bots to prevent infinite loops
     if (message.author.bot) return;
 
-    // Log the message content to the console for debugging (commented out for less console spam)
-    // console.log(`Received message: "${message.content}" from ${message.author.tag}`);
-
-    // --- WORD TRACKER LOGIC ---
-    // Check if the message contains the word to track
     if (message.content.toLowerCase().includes(WORD_TO_TRACK.toLowerCase())) {
         const userId = message.author.id;
-        if (!wordCounts[userId]) {
-            wordCounts[userId] = 0;
-        }
-        wordCounts[userId]++;
-        console.log(`${message.author.tag} said "${WORD_TO_TRACK}". Count: ${wordCounts[userId]}`);
+        wordCounts[userId] = (wordCounts[userId] || 0) + 1;
     }
-    // --- END WORD TRACKER LOGIC ---
 
-    // --- BLACKLIST CHECK (for any command) ---
-    if (message.content.toLowerCase().startsWith('!')) { // Only check if it's a command
+    if (message.content.toLowerCase().startsWith('!')) {
         if (BLACKLISTED_USER_IDS.includes(message.author.id)) {
-            try {
-                await message.reply('🤡');
-                console.log(`Blacklisted user ${message.author.tag} attempted to use a bot command.`);
-            } catch (error) {
-                console.error(`Error replying to blacklisted user:`, error);
-            }
+            try { await message.reply('🤡'); } catch (e) {}
             return;
         }
     }
-    // --- END BLACKLIST CHECK ---
 
-    // --- Command for Summarization ---
+    // !tldr Command
     if (message.content.toLowerCase().startsWith('!tldr')) {
-        if (await applyCooldown(message, 'tldr', COOLDOWN_SECONDS)) {
-            return; // Cooldown is active
-        }
+        if (await applyCooldown(message, 'tldr', COOLDOWN_SECONDS)) return;
 
         const thinkingMessage = await message.channel.send('Thinking... distilling the essence of chaos into digestible nuggets.');
 
@@ -147,7 +117,6 @@ client.on(Events.MessageCreate, async message => {
             }
 
             const fetchedMessages = await message.channel.messages.fetch({ limit: messageCount, before: message.id });
-
             const conversation = fetchedMessages
                 .filter(msg => !msg.author.bot)
                 .map(msg => `${msg.author.username}: ${msg.content}`)
@@ -159,22 +128,10 @@ client.on(Events.MessageCreate, async message => {
                 return;
             }
 
-            let prompt = '';
-            const humorRoll = Math.random();
-
-            // Adjusted probabilities: 60% /pol/ humor, 40% Reddit humor (Disney removed)
-            if (humorRoll < 0.6) { // Edgy/4chan /pol/ humor (60%)
-                prompt = `Summarize the following Discord conversation in 1-2 extremely concise, witty, rude, and troll-y sentences. For each key participant, provide one very short, funny comment about their contribution. Also, include 1-2 general snarky observations about the conversation as a whole, weaving in sarcastic pop culture or historical (especially WWII) references where fitting. Do not use bullet points. Ensure all sentences are complete. Refer to participants by their Discord username. Act as a centrist devil's advocate, highlighting absurdities without explicit slurs or hate speech.`;
-            } else { // Reddit-type humor (40%)
-                prompt = `Summarize the following Discord conversation in 1-2 extremely concise, witty, rude, and troll-y sentences. For each key participant, provide one very short, funny comment about their contribution. Also, include 1-2 general snarky observations about the conversation as a whole, using subtle internet culture references, pop culture, or historical (especially WWII) references, and inside jokes. Do not use bullet points. Ensure all sentences are complete. Refer to participants by their Discord username. Be chill, but don't shy away from unpopular opinions.`;
-            }
-
+            const prompt = getWittyPersonaPrompt(true);
             const payload = {
                 contents: [{ role: "user", parts: [{ text: prompt + `\n\n${conversation}` }] }],
-                generationConfig: {
-                    temperature: 0.9,
-                    maxOutputTokens: 100, // Still set to 100 for brevity and completeness
-                },
+                generationConfig: { temperature: 0.9, maxOutputTokens: 100 },
             };
 
             const response = await fetch(GEMINI_API_URL, {
@@ -183,36 +140,18 @@ client.on(Events.MessageCreate, async message => {
                 body: JSON.stringify(payload),
             });
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                console.error('Gemini API error response:', errorData);
-                throw new Error(`Gemini API request failed with status ${response.status}: ${errorData.error?.message || response.statusText}`);
-            }
-
             const result = await response.json();
-
-            let summary = 'My circuits are currently experiencing a comedic malfunction. Try again later!';
-            if (result.candidates && result.candidates.length > 0 &&
-                result.candidates[0].content && result.candidates[0].content.parts &&
-                result.candidates[0].content.parts.length > 0) {
-                summary = result.candidates[0].content.parts[0].text;
-            } else {
-                console.warn('Unexpected Gemini API response structure:', result);
-            }
+            const summary = result.candidates?.[0]?.content?.parts?.[0]?.text || 'My circuits are malfunctioning. Try again later!';
 
             await thinkingMessage.edit(`**TLDR of the last ${fetchedMessages.size} messages:**\n${summary.trim()}`);
-            console.log(`Successfully summarized conversation for ${message.channel.name}`);
-
         } catch (error) {
-            console.error('Error during summarization:', error);
             await thinkingMessage.edit(`My humor circuits are on the fritz: ${error.message}`);
         }
     }
-    // --- NEW COMMAND: ELI5 ---
+
+    // !eli5 Command
     else if (message.content.toLowerCase().startsWith('!eli5')) {
-        if (await applyCooldown(message, 'eli5', ELI5_COOLDOWN_SECONDS)) {
-            return; // Cooldown is active
-        }
+        if (await applyCooldown(message, 'eli5', ELI5_COOLDOWN_SECONDS)) return;
 
         const content = message.content.substring('!eli5'.length).trim();
         if (!content) {
@@ -223,15 +162,12 @@ client.on(Events.MessageCreate, async message => {
         const thinkingMessage = await message.channel.send('Alright, buttercup, let\'s break this down without melting my circuits...');
 
         try {
-            // ELI5 PROMPT for personality: factual, witty, snarky, troll-y, toxic with pop culture/history
-            const prompt = `Explain "${content}" factually and clearly, as if you're explaining it to someone who probably won't get it anyway. Maintain a witty, snarky, and slightly troll-y tone. Be a little rude and toxic in your delivery, but keep it chill and concise, aiming for 2-3 sentences. Weave in sarcastic pop culture or historical (especially WWII) references where fitting. Don't shy away from pointing out obvious flaws or basic misunderstandings, but avoid explicit slurs or hate speech.`;
+            const basePrompt = getWittyPersonaPrompt(false);
+            const prompt = `${basePrompt} Explain "${content}" factually and clearly, as if you're explaining it to someone who probably won't get it anyway. Keep the explanation concise, aiming for 2-3 sentences.`;
 
             const payload = {
                 contents: [{ role: "user", parts: [{ text: prompt }] }],
-                generationConfig: {
-                    temperature: 0.8,
-                    maxOutputTokens: 100,
-                },
+                generationConfig: { temperature: 0.8, maxOutputTokens: 100 },
             };
 
             const response = await fetch(GEMINI_API_URL, {
@@ -240,35 +176,18 @@ client.on(Events.MessageCreate, async message => {
                 body: JSON.stringify(payload),
             });
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                console.error('Gemini API error response for ELI5:', errorData);
-                throw new Error(`Gemini API request failed with status ${response.status}: ${errorData.error?.message || response.statusText}`);
-            }
-
             const result = await response.json();
-            let explanation = 'Uh oh, my brain is too big for this simple concept right now. Maybe you\'re the one who needs explaining.';
-            if (result.candidates && result.candidates.length > 0 &&
-                result.candidates[0].content && result.candidates[0].content.parts &&
-                result.candidates[0].content.parts.length > 0) {
-                explanation = result.candidates[0].content.parts[0].text;
-            } else {
-                console.warn('Unexpected Gemini API response structure for ELI5:', result);
-            }
-
+            const explanation = result.candidates?.[0]?.content?.parts?.[0]?.text || 'Brain too big, explain later.';
             const wikipediaLink = `https://en.wikipedia.org/wiki/${encodeURIComponent(content.replace(/ /g, '_'))}`;
 
-            await thinkingMessage.edit(`**ELI5:** ${explanation}\n\nWant to know more? Check out: <${wikipediaLink}>`);
-            console.log(`Successfully explained "${content}" for ${message.author.tag}.`);
-
+            await thinkingMessage.edit(`**ELI5:** ${explanation.trim()}\n\nWant to know more? Check out: <${wikipediaLink}>`);
         } catch (error) {
-            console.error('Error during ELI5 summarization:', error);
-            await thinkingMessage.edit(`My simple-explanation circuits are on the fritz, probably because your question was too dumb: ${error.message}`);
+            await thinkingMessage.edit(`My simple-explanation circuits are on the fritz: ${error.message}`);
         }
     }
-    // --- END NEW COMMAND ---
-    // --- NEW COMMAND: Display Word Scoreboard ---
-    else if (message.content.toLowerCase() === '!scoreboard') {
+
+    // !scoreboard Command
+    else if (message.content.toLowerCase().startsWith('!scoreboard')) {
         let scoreboardMessage = `**"${WORD_TO_TRACK}" Scoreboard:**\n`;
         const sortedUsers = Object.keys(wordCounts).sort((a, b) => wordCounts[b] - wordCounts[a]);
 
@@ -279,58 +198,95 @@ client.on(Events.MessageCreate, async message => {
                 try {
                     const user = await client.users.fetch(userId);
                     scoreboardMessage += `${user.username}: ${wordCounts[userId]}\n`;
-                } catch (error) {
-                    console.error(`Could not fetch user ${userId}:`, error);
+                } catch (e) {
                     scoreboardMessage += `Unknown User (${userId}): ${wordCounts[userId]}\n`;
                 }
             }
         }
         await message.channel.send(scoreboardMessage);
     }
-    // --- END NEW COMMAND ---
-});
 
-// Event listener for message reactions being added
-client.on(Events.MessageReactionAdd, async (reaction, user) => {
-    // Ensure the message is cached and not a partial
-    if (reaction.partial) {
-        try {
-            await reaction.fetch();
-        } catch (error) {
-            console.error('Something went wrong when fetching the message:', error);
-            return;
-        }
-    }
+    // !emojistats Command
+    else if (message.content.toLowerCase().startsWith('!emojistats')) {
+        let statsMessage = `**Emoji Popularity Contest (The Overuse Report):**\n`;
+        const sortedEmojis = Object.entries(emojiUsage).sort(([, a], [, b]) => b - a).slice(0, 10);
 
-    // Check if the reacted message is from the target user and hasn't triggered the GIF yet
-    if (reaction.message.author.id === TARGET_USER_ID_FOR_GIF && !triggeredGifMessages.has(reaction.message.id)) {
-        // Calculate total reactions on the message
-        const totalReactions = reaction.message.reactions.cache.reduce((acc, emoji) => acc + emoji.count, 0);
-
-        if (totalReactions >= MIN_REACTIONS_FOR_GIF) {
-            // Add message ID to the set to prevent re-triggering
-            triggeredGifMessages.add(reaction.message.id);
-
-            try {
-                await reaction.message.channel.send(GIF_URL);
-                console.log(`Sent GIF for message ${reaction.message.id} by ${reaction.message.author.tag}`);
-            } catch (error) {
-                console.error(`Error sending GIF for reaction:`, error);
+        if (sortedEmojis.length === 0) {
+            statsMessage += "Nobody is reacting to anything. It's like a deserted AOL chatroom in here.";
+        } else {
+            for (const [emoji, count] of sortedEmojis) {
+                statsMessage += `${emoji}: ${count}\n`;
             }
+            statsMessage += `\n*Slower than a 28.8k modem, but we got there.*`;
+        }
+        await message.channel.send(statsMessage);
+    }
+
+    // !hypo Command
+    else if (message.content.toLowerCase() === '!hypo') {
+        if (await applyCooldown(message, 'hypo', HYPO_COOLDOWN_SECONDS)) return;
+        const thinkingMessage = await message.channel.send('Alright, let\'s dive into the abyss of "what if"...');
+
+        try {
+            const basePrompt = getWittyPersonaPrompt(false);
+            const prompt = `${basePrompt} Generate one extremely witty, adult, funny, and thought-provoking hypothetical "Would you rather...?" or "What if...?" question. Make it sarcastic and fun.`;
+
+            const payload = {
+                contents: [{ role: "user", parts: [{ text: prompt }] }],
+                generationConfig: { temperature: 1.0, maxOutputTokens: 100 },
+            };
+
+            const response = await fetch(GEMINI_API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+
+            const result = await response.json();
+            const hypothetical = result.candidates?.[0]?.content?.parts?.[0]?.text || 'No thoughts, head empty.';
+
+            await thinkingMessage.edit(`**Hypothetical:** ${hypothetical.trim()}`);
+        } catch (error) {
+            await thinkingMessage.edit(`Hypothetical generator is on the fritz: ${error.message}`);
         }
     }
 });
 
+// EMOJI TRACKER LOGIC
+client.on(Events.MessageReactionAdd, async (reaction, user) => {
+    if (reaction.partial) {
+        try { await reaction.fetch(); } catch (error) { return; }
+    }
 
-// Log in to Discord with your bot's token
-// The token should be stored in a .env file for security
-// Make sure you have a .env file in the same directory as your bot.js file
-// and it contains a line like: DISCORD_TOKEN=YOUR_BOT_TOKEN_HERE
+    // Increment global emoji usage count
+    const emojiKey = reaction.emoji.id ? `<:${reaction.emoji.name}:${reaction.emoji.id}>` : reaction.emoji.name;
+    emojiUsage[emojiKey] = (emojiUsage[emojiKey] || 0) + 1;
+
+    // Reaction-Triggered GIF Logic
+    if (reaction.message.author.id === TARGET_USER_ID_FOR_GIF && !triggeredGifMessages.has(reaction.message.id)) {
+        const totalReactions = reaction.message.reactions.cache.reduce((acc, emoji) => acc + emoji.count, 0);
+        if (totalReactions >= MIN_REACTIONS_FOR_GIF) {
+            triggeredGifMessages.add(reaction.message.id);
+            try { await reaction.message.channel.send(GIF_URL); } catch (e) {}
+        }
+    }
+});
+
+client.on(Events.MessageReactionRemove, async (reaction, user) => {
+    if (reaction.partial) {
+        try { await reaction.fetch(); } catch (error) { return; }
+    }
+    // Decrement global emoji usage count when a reaction is removed
+    const emojiKey = reaction.emoji.id ? `<:${reaction.emoji.name}:${reaction.emoji.id}>` : reaction.emoji.name;
+    if (emojiUsage[emojiKey] && emojiUsage[emojiKey] > 0) {
+        emojiUsage[emojiKey]--;
+    }
+});
+
 client.login(process.env.DISCORD_TOKEN)
     .then(() => console.log('Bot successfully logged in to Discord.'))
     .catch(error => console.error('Failed to log in to Discord:', error));
 
-// Add this for more robust error handling during startup
 process.on('unhandledRejection', error => {
     console.error('Unhandled promise rejection:', error);
 });
