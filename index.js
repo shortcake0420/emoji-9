@@ -9,7 +9,7 @@ const BLACKLISTED_USER_IDS = [
     '787804741924159488',
 ];
 
-const WORD_TO_TRACK = 'whining';
+const WORD_TO_TRACK = 'nigger';
 const wordCounts = {};
 const emojiUsage = {};
 
