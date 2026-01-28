@@ -1,12 +1,9 @@
 // Import the necessary classes from the discord.js library
-import { Client, Events, GatewayIntentBits, Partials } from 'discord.js';
+import { Client, Events, GatewayIntentBits, Partials, EmbedBuilder } from 'discord.js';
 import 'dotenv/config';
 
-// Define constants for the Gemini API
-// CHANGED: Switched from gemini-2.0-flash to gemini-1.5-flash for better quota stability
-const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY || ""}`;
-
 // --- CONFIGURATION ---
+const GEMINI_MODEL = "gemini-1.5-flash"; // Switched to stable 1.5 to fix the 429 error
 const BLACKLISTED_USER_IDS = [
     '718505488202989678', 
     '787804741924159488',
@@ -14,23 +11,17 @@ const BLACKLISTED_USER_IDS = [
 
 const WORD_TO_TRACK = 'whining';
 const wordCounts = {};
-
-// --- EMOJI TRACKER CONFIGURATION ---
-// Object to store emoji usage counts (emoji name/id -> count)
 const emojiUsage = {};
-// --- END EMOJI TRACKER CONFIGURATION ---
 
 const cooldowns = new Map();
 const COOLDOWN_SECONDS = 60;
 const ELI5_COOLDOWN_SECONDS = 30;
 const HYPO_COOLDOWN_SECONDS = 45;
 
-// --- REACTION GIF CONFIGURATION ---
 const TARGET_USER_ID_FOR_GIF = '569277281046888488';
 const MIN_REACTIONS_FOR_GIF = 3;
 const GIF_URL = 'https://foulplayscom.wordpress.com/wp-content/uploads/2025/07/pmcookin.gif';
 const triggeredGifMessages = new Set();
-// --- END REACTION GIF CONFIGURATION ---
 
 // Create a new Discord client instance with Partials for reactions
 const client = new Client({
@@ -41,13 +32,53 @@ const client = new Client({
         GatewayIntentBits.DirectMessages,
         GatewayIntentBits.GuildMessageReactions,
     ],
-    // Partials allow the bot to see reactions on messages sent before it was online
     partials: [Partials.Message, Partials.Reaction, Partials.User],
 });
 
 client.once(Events.ClientReady, c => {
     console.log(`Ready! Logged in as ${c.user.tag}`);
+    console.log(`Using model: ${GEMINI_MODEL}`);
 });
+
+/**
+ * Exponential Backoff helper for Gemini API calls.
+ */
+async function callGemini(payload) {
+    const apiKey = process.env.GEMINI_API_KEY || "";
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+    
+    const maxRetries = 5;
+    const baseDelay = 1000;
+
+    for (let i = 0; i < maxRetries; i++) {
+        try {
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                return data;
+            }
+
+            if (response.status === 429 && i < maxRetries - 1) {
+                const delay = baseDelay * Math.pow(2, i);
+                console.log(`Rate limited. Retrying in ${delay}ms...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                continue;
+            }
+
+            throw new Error(data.error?.message || response.statusText);
+        } catch (error) {
+            if (i === maxRetries - 1) throw error;
+            const delay = baseDelay * Math.pow(2, i);
+            await new Promise(resolve => setTimeout(resolve, delay));
+        }
+    }
+}
 
 // Helper function for cooldown check
 async function applyCooldown(message, commandName, cooldownTimeSeconds) {
@@ -103,19 +134,15 @@ client.on(Events.MessageCreate, async message => {
         }
     }
 
-    // !tldr Command
     if (message.content.toLowerCase().startsWith('!tldr')) {
         if (await applyCooldown(message, 'tldr', COOLDOWN_SECONDS)) return;
-
         const thinkingMessage = await message.channel.send('Thinking... distilling the essence of chaos into digestible nuggets.');
-
         try {
             const args = message.content.split(' ');
             let messageCount = 50;
             if (args.length > 1 && !isNaN(parseInt(args[1]))) {
                 messageCount = Math.min(parseInt(args[1]), 100);
             }
-
             const fetchedMessages = await message.channel.messages.fetch({ limit: messageCount, before: message.id });
             const conversation = fetchedMessages
                 .filter(msg => !msg.author.bot)
@@ -128,71 +155,44 @@ client.on(Events.MessageCreate, async message => {
                 return;
             }
 
-            const prompt = getWittyPersonaPrompt(true);
             const payload = {
-                contents: [{ role: "user", parts: [{ text: prompt + `\n\n${conversation}` }] }],
+                contents: [{ role: "user", parts: [{ text: getWittyPersonaPrompt(true) + `\n\n${conversation}` }] }],
                 generationConfig: { temperature: 0.9, maxOutputTokens: 100 },
             };
 
-            const response = await fetch(GEMINI_API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-            });
-
-            const result = await response.json();
-            const summary = result.candidates?.[0]?.content?.parts?.[0]?.text || 'My circuits are malfunctioning. Try again later!';
-
+            const result = await callGemini(payload);
+            const summary = result.candidates?.[0]?.content?.parts?.[0]?.text || 'My circuits are malfunctioning.';
             await thinkingMessage.edit(`**TLDR of the last ${fetchedMessages.size} messages:**\n${summary.trim()}`);
         } catch (error) {
             await thinkingMessage.edit(`My humor circuits are on the fritz: ${error.message}`);
         }
     }
 
-    // !eli5 Command
     else if (message.content.toLowerCase().startsWith('!eli5')) {
         if (await applyCooldown(message, 'eli5', ELI5_COOLDOWN_SECONDS)) return;
-
         const content = message.content.substring('!eli5'.length).trim();
-        if (!content) {
-            await message.reply('What do you want me to explain like you\'re 5? Give me something to work with, buttercup.');
-            return;
-        }
-
-        const thinkingMessage = await message.channel.send('Alright, buttercup, let\'s break this down without melting my circuits...');
-
+        if (!content) return await message.reply('What am I explaining? Give me something to work with.');
+        const thinkingMessage = await message.channel.send('Alright, buttercup, let\'s break this down...');
         try {
-            const basePrompt = getWittyPersonaPrompt(false);
-            const prompt = `${basePrompt} Explain "${content}" factually and clearly, as if you're explaining it to someone who probably won't get it anyway. Keep the explanation concise, aiming for 2-3 sentences.`;
-
+            const prompt = `${getWittyPersonaPrompt(false)} Explain "${content}" factually and clearly in 2-3 sentences.`;
             const payload = {
                 contents: [{ role: "user", parts: [{ text: prompt }] }],
                 generationConfig: { temperature: 0.8, maxOutputTokens: 100 },
             };
-
-            const response = await fetch(GEMINI_API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-            });
-
-            const result = await response.json();
+            const result = await callGemini(payload);
             const explanation = result.candidates?.[0]?.content?.parts?.[0]?.text || 'Brain too big, explain later.';
             const wikipediaLink = `https://en.wikipedia.org/wiki/${encodeURIComponent(content.replace(/ /g, '_'))}`;
-
-            await thinkingMessage.edit(`**ELI5:** ${explanation.trim()}\n\nWant to know more? Check out: <${wikipediaLink}>`);
+            await thinkingMessage.edit(`**ELI5:** ${explanation.trim()}\n\nMore info: <${wikipediaLink}>`);
         } catch (error) {
             await thinkingMessage.edit(`My simple-explanation circuits are on the fritz: ${error.message}`);
         }
     }
 
-    // !scoreboard Command
     else if (message.content.toLowerCase().startsWith('!scoreboard')) {
         let scoreboardMessage = `**"${WORD_TO_TRACK}" Scoreboard:**\n`;
         const sortedUsers = Object.keys(wordCounts).sort((a, b) => wordCounts[b] - wordCounts[a]);
-
         if (sortedUsers.length === 0) {
-            scoreboardMessage += 'No one has said the word yet. Get to it, losers!';
+            scoreboardMessage += 'No one has said the word yet.';
         } else {
             for (const userId of sortedUsers) {
                 try {
@@ -206,63 +206,47 @@ client.on(Events.MessageCreate, async message => {
         await message.channel.send(scoreboardMessage);
     }
 
-    // !emojistats Command
     else if (message.content.toLowerCase().startsWith('!emojistats')) {
-        let statsMessage = `**Emoji Popularity Contest (The Overuse Report):**\n`;
         const sortedEmojis = Object.entries(emojiUsage).sort(([, a], [, b]) => b - a).slice(0, 10);
+        
+        const statsEmbed = new EmbedBuilder()
+            .setTitle('Emoji Popularity Contest (The Overuse Report)')
+            .setColor(0x2B2D31) // Sleek dark grey
+            .setTimestamp();
 
         if (sortedEmojis.length === 0) {
-            statsMessage += "Nobody is reacting to anything. It's like a deserted AOL chatroom in here.";
+            statsEmbed.setDescription("Nobody is reacting to anything. It's like a deserted AOL chatroom in here.");
         } else {
-            for (const [emoji, count] of sortedEmojis) {
-                statsMessage += `${emoji}: ${count}\n`;
-            }
-            statsMessage += `\n*Slower than a 28.8k modem, but we got there.*`;
+            const list = sortedEmojis.map(([emoji, count]) => `${emoji} \`${count}\``).join('\n');
+            statsEmbed.setDescription(list);
+            statsEmbed.setFooter({ text: 'Tracking all your questionable reactions...' });
         }
-        await message.channel.send(statsMessage);
+        
+        await message.channel.send({ embeds: [statsEmbed] });
     }
 
-    // !hypo Command
     else if (message.content.toLowerCase() === '!hypo') {
         if (await applyCooldown(message, 'hypo', HYPO_COOLDOWN_SECONDS)) return;
-        const thinkingMessage = await message.channel.send('Alright, let\'s dive into the abyss of "what if"...');
-
+        const thinkingMessage = await message.channel.send('Alright, let\'s dive into the abyss...');
         try {
-            const basePrompt = getWittyPersonaPrompt(false);
-            const prompt = `${basePrompt} Generate one extremely witty, adult, funny, and thought-provoking hypothetical "Would you rather...?" or "What if...?" question. Make it sarcastic and fun.`;
-
+            const prompt = `${getWittyPersonaPrompt(false)} Generate one extremely witty, adult, funny "Would you rather...?" question.`;
             const payload = {
                 contents: [{ role: "user", parts: [{ text: prompt }] }],
                 generationConfig: { temperature: 1.0, maxOutputTokens: 100 },
             };
-
-            const response = await fetch(GEMINI_API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-            });
-
-            const result = await response.json();
-            const hypothetical = result.candidates?.[0]?.content?.parts?.[0]?.text || 'No thoughts, head empty.';
-
+            const result = await callGemini(payload);
+            const hypothetical = result.candidates?.[0]?.content?.parts?.[0]?.text || 'No thoughts.';
             await thinkingMessage.edit(`**Hypothetical:** ${hypothetical.trim()}`);
         } catch (error) {
-            await thinkingMessage.edit(`Hypothetical generator is on the fritz: ${error.message}`);
+            await thinkingMessage.edit(`Generator is on the fritz: ${error.message}`);
         }
     }
 });
 
-// EMOJI TRACKER LOGIC
 client.on(Events.MessageReactionAdd, async (reaction, user) => {
-    if (reaction.partial) {
-        try { await reaction.fetch(); } catch (error) { return; }
-    }
-
-    // Increment global emoji usage count
+    if (reaction.partial) { try { await reaction.fetch(); } catch (error) { return; } }
     const emojiKey = reaction.emoji.id ? `<:${reaction.emoji.name}:${reaction.emoji.id}>` : reaction.emoji.name;
     emojiUsage[emojiKey] = (emojiUsage[emojiKey] || 0) + 1;
-
-    // Reaction-Triggered GIF Logic
     if (reaction.message.author.id === TARGET_USER_ID_FOR_GIF && !triggeredGifMessages.has(reaction.message.id)) {
         const totalReactions = reaction.message.reactions.cache.reduce((acc, emoji) => acc + emoji.count, 0);
         if (totalReactions >= MIN_REACTIONS_FOR_GIF) {
@@ -273,14 +257,9 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
 });
 
 client.on(Events.MessageReactionRemove, async (reaction, user) => {
-    if (reaction.partial) {
-        try { await reaction.fetch(); } catch (error) { return; }
-    }
-    // Decrement global emoji usage count when a reaction is removed
+    if (reaction.partial) { try { await reaction.fetch(); } catch (error) { return; } }
     const emojiKey = reaction.emoji.id ? `<:${reaction.emoji.name}:${reaction.emoji.id}>` : reaction.emoji.name;
-    if (emojiUsage[emojiKey] && emojiUsage[emojiKey] > 0) {
-        emojiUsage[emojiKey]--;
-    }
+    if (emojiUsage[emojiKey] && emojiUsage[emojiKey] > 0) emojiUsage[emojiKey]--;
 });
 
 client.login(process.env.DISCORD_TOKEN)
