@@ -22,12 +22,9 @@ let configError = null;
 const initDatabase = () => {
     try {
         let rawConfig = process.env.FIREBASE_CONFIG || '{}';
-        
-        // Clean up accidental quotes from Render/env pasting
         if (rawConfig.startsWith("'") && rawConfig.endsWith("'")) {
             rawConfig = rawConfig.slice(1, -1);
         }
-
         const firebaseConfig = JSON.parse(rawConfig);
         
         if (firebaseConfig.apiKey) {
@@ -62,6 +59,10 @@ const BLACKLISTED_USER_IDS = ['718505488202989678', '787804741924159488'];
 const WORD_TO_TRACK = 'nigger';
 const TARGET_EMOJI_NAME = 'emoji_9'; 
 
+// Special GIF Trigger Config
+const SPECIAL_TARGET_USER_ID = '569277281046888488';
+const COOKIN_GIF_URL = 'https://foulplayscom.wordpress.com/wp-content/uploads/2025/07/pmcookin.gif';
+
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -85,10 +86,14 @@ client.on(Events.MessageCreate, async message => {
 
     if (!dbReady) return; 
 
-    // 1. Word Tracking
+    // 1. Word Tracking & Reaction Trigger
     if (content.includes(WORD_TO_TRACK)) {
         const userDoc = doc(db, 'artifacts', appId, 'public', 'data', 'wordCounts', message.author.id);
         await setDoc(userDoc, { count: increment(1), username: message.author.username }, { merge: true }).catch(() => null);
+        
+        try {
+            await message.react('😢'); 
+        } catch (e) { console.error("Could not react:", e); }
     }
 
     // 2. Blacklist check
@@ -110,7 +115,6 @@ client.on(Events.MessageCreate, async message => {
                 return message.channel.send(`No data for :${TARGET_EMOJI_NAME}: yet.`);
             }
 
-            // Slice into pages of 5, max 15 (3 pages)
             const totalToDisplay = Math.min(scores.length, 15);
             const pagedScores = [];
             for (let i = 0; i < totalToDisplay; i += 5) {
@@ -204,8 +208,23 @@ client.on(Events.MessageCreate, async message => {
 
 client.on(Events.MessageReactionAdd, async (reaction, user) => {
     if (!dbReady || user.bot) return;
-    if (reaction.partial) await reaction.fetch().catch(() => null);
     
+    // Fetch full reaction if partial
+    if (reaction.partial) await reaction.fetch().catch(() => null);
+    if (reaction.message.partial) await reaction.message.fetch().catch(() => null);
+    
+    // --- SPECIAL GIF TRIGGER ---
+    // Check if the message author is the target and total reacts reached exactly 3
+    if (reaction.message.author.id === SPECIAL_TARGET_USER_ID) {
+        const totalReacts = reaction.message.reactions.cache.reduce((acc, r) => acc + r.count, 0);
+        if (totalReacts === 3) {
+            try {
+                await reaction.message.reply(COOKIN_GIF_URL);
+            } catch (e) { console.error("Could not send special GIF:", e); }
+        }
+    }
+
+    // --- LEADERBOARD TRACKING ---
     if (reaction.emoji.name && reaction.emoji.name.toLowerCase() === TARGET_EMOJI_NAME.toLowerCase()) {
         const userEmojiDoc = doc(db, 'artifacts', appId, 'public', 'data', 'emoji9Leaderboard', user.id);
         await setDoc(userEmojiDoc, { count: increment(1), username: user.username }, { merge: true }).catch(() => null);
