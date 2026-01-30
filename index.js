@@ -92,7 +92,7 @@ client.on(Events.MessageCreate, async message => {
         await setDoc(userDoc, { count: increment(1), username: message.author.username }, { merge: true }).catch(() => null);
         
         try {
-            await message.react('😢'); 
+            await message.react(':emoji_9:'); 
         } catch (e) { console.error("Could not react:", e); }
     }
 
