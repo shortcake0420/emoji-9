@@ -92,7 +92,14 @@ client.on(Events.MessageCreate, async message => {
         await setDoc(userDoc, { count: increment(1), username: message.author.username }, { merge: true }).catch(() => null);
         
         try {
-            await message.react(':emoji_9:'); 
+            // Find the custom emoji in the server
+            const customEmoji = message.guild?.emojis.cache.find(e => e.name === TARGET_EMOJI_NAME);
+            if (customEmoji) {
+                await message.react(customEmoji);
+            } else {
+                // Fallback to sad face if emoji_9 isn't found
+                await message.react('😢'); 
+            }
         } catch (e) { console.error("Could not react:", e); }
     }
 
@@ -214,7 +221,6 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
     if (reaction.message.partial) await reaction.message.fetch().catch(() => null);
     
     // --- SPECIAL GIF TRIGGER ---
-    // Check if the message author is the target and total reacts reached exactly 3
     if (reaction.message.author.id === SPECIAL_TARGET_USER_ID) {
         const totalReacts = reaction.message.reactions.cache.reduce((acc, r) => acc + r.count, 0);
         if (totalReacts === 3) {
