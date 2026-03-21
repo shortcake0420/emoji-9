@@ -11,7 +11,7 @@ import {
 } from 'discord.js';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously } from 'firebase/auth';
-import { getFirestore, doc, getDoc, setDoc, getDocs, collection, increment } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, setDoc, getDocs, collection, increment, query, where } from 'firebase/firestore';
 import 'dotenv/config';
 
 // ==========================================
@@ -491,7 +491,7 @@ client.on(Events.MessageCreate, async message => {
             return message.reply('Usage: `!mimic @user` or `!mimic username`');
         }
 
-        // Resolve target user — mention takes priority, then username search
+        // Resolve target user — mention takes priority, then guild cache, then Firestore fallback
         let targetUser = message.mentions.users.first() ?? null;
         if (!targetUser && message.guild) {
             const member = message.guild.members.cache.find(
@@ -500,21 +500,40 @@ client.on(Events.MessageCreate, async message => {
             targetUser = member?.user ?? null;
         }
 
-        if (!targetUser) {
-            return message.reply(`Could not find user **${arg}**.`);
-        }
-
-        const thinkingMessage = await message.channel.send(`Cooking up a **${targetUser.username}** impression...`);
+        const thinkingMessage = await message.channel.send(`Cooking up a **${targetUser?.username ?? arg}** impression...`);
 
         try {
-            // Pull stored messages from Firestore — keyed by user ID
-            const mimicRef = doc(db, 'artifacts', FIREBASE_APP_ID, 'mimicData', targetUser.id);
-            const mimicSnap = await getDoc(mimicRef);
+            let mimicSnap;
 
-            if (!mimicSnap.exists() || !mimicSnap.data().messages?.length) {
-                return thinkingMessage.edit(
-                    `No message data found for **${targetUser.username}**. Run \`node scrape-mimic-data.js\` first.`
+            if (targetUser) {
+                // Normal path: user is in server, look up by ID
+                const mimicRef = doc(db, 'artifacts', FIREBASE_APP_ID, 'mimicData', targetUser.id);
+                mimicSnap = await getDoc(mimicRef);
+
+                if (!mimicSnap.exists() || !mimicSnap.data().messages?.length) {
+                    return thinkingMessage.edit(
+                        `No message data found for **${targetUser.username}**. Run \`node scrape-mimic-data.js\` first.`
+                    );
+                }
+            } else {
+                // Fallback: user not in server — search mimicData by username field
+                const q = query(
+                    collection(db, 'artifacts', FIREBASE_APP_ID, 'mimicData'),
+                    where('username', '==', arg.toLowerCase())
                 );
+                const results = await getDocs(q);
+
+                if (results.empty) {
+                    return thinkingMessage.edit(`Could not find user **${arg}**.`);
+                }
+
+                mimicSnap = results.docs[0];
+
+                if (!mimicSnap.data().messages?.length) {
+                    return thinkingMessage.edit(
+                        `No message data found for **${arg}**. Run \`node scrape-mimic-data.js\` first.`
+                    );
+                }
             }
 
             const { messages, username } = mimicSnap.data();
