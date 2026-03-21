@@ -7,11 +7,14 @@ import {
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
-    ComponentType
+    ComponentType,
+    SlashCommandBuilder,
+    REST,
+    Routes,
 } from 'discord.js';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously } from 'firebase/auth';
-import { getFirestore, doc, setDoc, getDocs, collection, increment } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, setDoc, getDocs, collection, increment } from 'firebase/firestore';
 import 'dotenv/config';
 
 // ==========================================
@@ -387,6 +390,112 @@ client.on(Events.MessageReactionRemove, async (reaction, user) => {
             { count: increment(-1), username: user.username },
             { merge: true }
         ).catch(() => null);
+    }
+});
+
+// ==========================================
+// EVENT: CLIENT READY — register slash commands
+// ==========================================
+client.once(Events.ClientReady, async () => {
+    console.log(`✅ Logged in as ${client.user.tag}`);
+
+    const mimicCommand = new SlashCommandBuilder()
+        .setName('mimic')
+        .setDescription("Generate a message imitating a user's style")
+        .addUserOption(opt =>
+            opt.setName('user')
+               .setDescription('The user to mimic')
+               .setRequired(true)
+        );
+
+    const rest = new REST().setToken(process.env.DISCORD_TOKEN);
+    try {
+        await rest.put(
+            Routes.applicationCommands(client.user.id),
+            { body: [mimicCommand.toJSON()] }
+        );
+        console.log('✅ /mimic slash command registered.');
+    } catch (e) {
+        console.error('Failed to register slash commands:', e);
+    }
+});
+
+// ==========================================
+// EVENT: INTERACTION CREATE — /mimic command
+// ==========================================
+client.on(Events.InteractionCreate, async interaction => {
+    if (!interaction.isChatInputCommand() || interaction.commandName !== 'mimic') return;
+
+    if (!dbReady) {
+        return interaction.reply({ content: 'Database not ready yet, try again in a moment.', ephemeral: true });
+    }
+
+    const targetUser = interaction.options.getUser('user');
+
+    // Defer so we have time to call Firebase + Groq
+    await interaction.deferReply();
+
+    try {
+        // Pull stored messages from Firestore
+        const mimicRef = doc(db, 'artifacts', FIREBASE_APP_ID, 'mimicData', targetUser.id);
+        const mimicSnap = await getDoc(mimicRef);
+
+        if (!mimicSnap.exists() || !mimicSnap.data().messages?.length) {
+            return interaction.editReply(
+                `No message data found for **${targetUser.username}**. Run \`node scrape-mimic-data.js\` first.`
+            );
+        }
+
+        const { messages, username } = mimicSnap.data();
+
+        // Feed up to 150 messages to stay within Groq's context limit
+        const sample = messages.slice(0, 150).join('\n');
+
+        const systemPrompt =
+            'You are an expert at analyzing someone\'s unique writing style and generating new messages that ' +
+            'sound exactly like them. Study their tone, vocabulary, punctuation habits, slang, use of caps, ' +
+            'humor, and sentence length. Then generate ONE single Discord message that sounds authentically ' +
+            'like this person. Output only the message text — no explanation, no surrounding quotes, no preamble.';
+
+        const userPrompt =
+            `Here are real Discord messages from a user named ${username}:\n\n${sample}\n\n` +
+            `Now generate ONE new message that sounds exactly like this person.`;
+
+        const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                model: 'llama3-70b-8192',
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user',   content: userPrompt   },
+                ],
+                max_tokens: 200,
+                temperature: 0.9,
+            }),
+        });
+
+        if (!groqRes.ok) {
+            const err = await groqRes.text();
+            console.error('Groq API error:', err);
+            return interaction.editReply('Groq API returned an error. Try again later.');
+        }
+
+        const groqData = await groqRes.json();
+        const generated = groqData.choices?.[0]?.message?.content?.trim();
+
+        if (!generated) {
+            return interaction.editReply('Got an empty response from Groq. Try again.');
+        }
+
+        await interaction.editReply(`"${generated}" — @${username}, allegedly.`);
+
+    } catch (e) {
+        console.error('Mimic command error:', e);
+        await interaction.editReply('Something went wrong. Try again.').catch(() => null);
     }
 });
 
