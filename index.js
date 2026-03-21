@@ -109,12 +109,12 @@ async function applyCooldown(message, commandName, cooldownTimeSeconds) {
 }
 
 function getWittyPersonaPrompt(isTldr = true) {
-    const basePersona = `Act as a witty, sarcastic, and chill internet observer who lived through the 90s and 2000s. Refer to pop culture, tech history, and events from those decades (like dial-up, Napster, early social media, 90s fashion, music, or Y2K anxieties) to make observations. Maintain a snarky, devil's advocate attitude.`;
+    const basePersona = `You are a chaotic, internet-brained Discord user. You're funny, a little unhinged, and speak in punchy internet slang. You have strong opinions, zero patience for fluff, and a dark sense of humor. You don't explain yourself. You just say the thing.`;
 
     if (isTldr) {
-        return `${basePersona} Summarize the following Discord conversation in 3-4 sentences total — no more. Cover the gist and throw in one snarky observation. Do NOT use bullet points. Every sentence MUST be complete — never trail off or cut off mid-thought. If you are running out of space, finish your current sentence and stop. Refer to participants by their Discord username.`;
+        return `${basePersona} Summarize the following Discord conversation in 3-4 sentences max. Be blunt, funny, and mean if warranted. Refer to people by their Discord username. Do NOT use bullet points. Every sentence MUST be fully complete — never trail off or get cut off mid-sentence. Stop when you're done. Do not pad.`;
     } else {
-        return `${basePersona} Generate a response that is witty, fun, and uses subtle sarcasm and relevant 90s/00s references to deliver the content.`;
+        return `${basePersona} Respond in 2-3 sentences max. Never explain more than you need to. Stop when you're done — do not trail off or get cut off mid-sentence.`;
     }
 }
 
@@ -427,7 +427,7 @@ client.on(Events.MessageCreate, async message => {
 
         try {
             const basePrompt = getWittyPersonaPrompt(false);
-            const userPrompt = `Explain "${eli5Content}" factually and clearly, as if you're explaining it to someone who probably won't get it anyway. Keep the explanation concise, aiming for 2-3 sentences.`;
+            const userPrompt = `Explain "${eli5Content}".`;
 
             const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
                 method: 'POST',
@@ -526,9 +526,9 @@ client.on(Events.MessageCreate, async message => {
             const systemPrompt =
                 'You are an expert at analyzing someone\'s unique writing style and generating new messages that ' +
                 'sound exactly like them. Study their tone, vocabulary, punctuation habits, slang, use of caps, ' +
-                'humor, and sentence length. Then generate ONE single Discord message that sounds authentically ' +
-                'like this person. Keep it to 1-2 complete sentences maximum — brief but never cut off mid-thought. ' +
-                'Always end on a fully completed sentence. Output only the message text — no explanation, no surrounding quotes, no preamble.';
+                'humor, and sentence length. Generate ONE Discord message that sounds authentically like this person. ' +
+                'Keep it to 1-2 complete sentences — never cut off mid-thought. Always end on a fully completed sentence. ' +
+                'Output only the message text — no explanation, no surrounding quotes, no preamble.';
 
             const userPrompt =
                 `Here are real Discord messages from a user named ${username}:\n\n${sample}\n\n` +
