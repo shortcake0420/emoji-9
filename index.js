@@ -112,7 +112,7 @@ function getWittyPersonaPrompt(isTldr = true) {
     const basePersona = `Act as a witty, sarcastic, and chill internet observer who lived through the 90s and 2000s. Refer to pop culture, tech history, and events from those decades (like dial-up, Napster, early social media, 90s fashion, music, or Y2K anxieties) to make observations. Maintain a snarky, devil's advocate attitude.`;
 
     if (isTldr) {
-        return `${basePersona} Summarize the following Discord conversation in 1-2 extremely concise sentences. For each key participant, provide one very short, funny, and sarcastic comment about their contribution. Also, include 1-2 general snarky observations about the conversation as a whole. Do not use bullet points. Ensure all sentences are complete. Refer to participants by their Discord username.`;
+        return `${basePersona} Summarize the following Discord conversation in 3-4 sentences total — no more. Cover the gist and throw in one snarky observation. Do NOT use bullet points. Every sentence MUST be complete — never trail off or cut off mid-thought. If you are running out of space, finish your current sentence and stop. Refer to participants by their Discord username.`;
     } else {
         return `${basePersona} Generate a response that is witty, fun, and uses subtle sarcasm and relevant 90s/00s references to deliver the content.`;
     }
@@ -390,7 +390,7 @@ client.on(Events.MessageCreate, async message => {
                         { role: 'system', content: systemPrompt },
                         { role: 'user',   content: conversation  },
                     ],
-                    max_tokens: 100,
+                    max_tokens: 180,
                     temperature: 0.9,
                 }),
             });
@@ -404,10 +404,10 @@ client.on(Events.MessageCreate, async message => {
             }
             const summary = result.choices?.[0]?.message?.content || 'My circuits are malfunctioning. Try again later!';
 
-            await thinkingMessage.edit(`**TLDR of the last ${fetchedMessages.size} messages:**\n${summary.trim()}`);
+            return thinkingMessage.edit(`**TLDR of the last ${fetchedMessages.size} messages:**\n${summary.trim()}`);
         } catch (error) {
             console.error('!tldr error:', error);
-            await thinkingMessage.edit(`My humor circuits are on the fritz: ${error.message}`);
+            return thinkingMessage.edit(`My humor circuits are on the fritz: ${error.message}`);
         }
     }
 
@@ -456,10 +456,10 @@ client.on(Events.MessageCreate, async message => {
             const explanation = result.choices?.[0]?.message?.content || 'Brain too big, explain later.';
             const wikipediaLink = `https://en.wikipedia.org/wiki/${encodeURIComponent(eli5Content.replace(/ /g, '_'))}`;
 
-            await thinkingMessage.edit(`**ELI5:** ${explanation.trim()}\n\nWant to know more? Check out: <${wikipediaLink}>`);
+            return thinkingMessage.edit(`**ELI5:** ${explanation.trim()}\n\nWant to know more? Check out: <${wikipediaLink}>`);
         } catch (error) {
             console.error('!eli5 error:', error);
-            await thinkingMessage.edit(`My simple-explanation circuits are on the fritz: ${error.message}`);
+            return thinkingMessage.edit(`My simple-explanation circuits are on the fritz: ${error.message}`);
         }
     }
 
@@ -507,8 +507,9 @@ client.on(Events.MessageCreate, async message => {
         const thinkingMessage = await message.channel.send(`Cooking up a **${targetUser.username}** impression...`);
 
         try {
-            // Pull stored messages from Firestore
-            const mimicRef = doc(db, 'artifacts', FIREBASE_APP_ID, 'mimicData', targetUser.id);
+            // Pull stored messages from Firestore — keyed by lowercase username
+            const mimicKey = targetUser.username.toLowerCase();
+            const mimicRef = doc(db, 'artifacts', FIREBASE_APP_ID, 'mimicData', mimicKey);
             const mimicSnap = await getDoc(mimicRef);
 
             if (!mimicSnap.exists() || !mimicSnap.data().messages?.length) {
@@ -526,7 +527,8 @@ client.on(Events.MessageCreate, async message => {
                 'You are an expert at analyzing someone\'s unique writing style and generating new messages that ' +
                 'sound exactly like them. Study their tone, vocabulary, punctuation habits, slang, use of caps, ' +
                 'humor, and sentence length. Then generate ONE single Discord message that sounds authentically ' +
-                'like this person. Output only the message text — no explanation, no surrounding quotes, no preamble.';
+                'like this person. Keep it to 1-2 complete sentences maximum — brief but never cut off mid-thought. ' +
+                'Always end on a fully completed sentence. Output only the message text — no explanation, no surrounding quotes, no preamble.';
 
             const userPrompt =
                 `Here are real Discord messages from a user named ${username}:\n\n${sample}\n\n` +
@@ -562,11 +564,11 @@ client.on(Events.MessageCreate, async message => {
                 return thinkingMessage.edit('Got an empty response from Groq. Try again.');
             }
 
-            await thinkingMessage.edit(`"${generated}" — @${username}, allegedly.`);
+            return thinkingMessage.edit(`"${generated}" — @${username}, allegedly.`);
 
         } catch (e) {
             console.error('!mimic error:', e);
-            await thinkingMessage.edit('Something went wrong. Try again.').catch(() => null);
+            return thinkingMessage.edit('Something went wrong. Try again.').catch(() => null);
         }
     }
 });
