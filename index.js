@@ -79,6 +79,52 @@ const COOKING_GIF_URL = 'https://foulplayscom.wordpress.com/wp-content/uploads/2
 const gifTriggeredMessages = new Set();
 
 // ==========================================
+// COOLDOWN & PERSONA HELPERS (!tldr / !eli5)
+// ==========================================
+const cooldowns = new Map();
+const COOLDOWN_SECONDS = 60;
+const ELI5_COOLDOWN_SECONDS = 30;
+
+async function applyCooldown(message, commandName, cooldownTimeSeconds) {
+    const userId = message.author.id;
+    const now = Date.now();
+    let userCooldowns;
+
+    if (message.guild) {
+        const guildId = message.guild.id;
+        if (!cooldowns.has(guildId)) {
+            cooldowns.set(guildId, new Map());
+        }
+        userCooldowns = cooldowns.get(guildId);
+    } else {
+        userCooldowns = cooldowns;
+    }
+
+    const lastUsed = userCooldowns.get(`${userId}:${commandName}`);
+    if (lastUsed && (now - lastUsed < cooldownTimeSeconds * 1000)) {
+        const timeLeft = Math.ceil((cooldownTimeSeconds * 1000 - (now - lastUsed)) / 1000);
+        await message.reply(`bro chill :emoji_51: (Cooldown: ${timeLeft}s for !${commandName})`);
+        return true;
+    }
+
+    userCooldowns.set(`${userId}:${commandName}`, now);
+    return false;
+}
+
+function getWittyPersonaPrompt(isTldr = true) {
+    const basePersona = `Act as a witty, sarcastic, and chill internet observer who lived through the 90s and 2000s. Refer to pop culture, tech history, and events from those decades (like dial-up, Napster, early social media, 90s fashion, music, or Y2K anxieties) to make observations. Maintain a snarky, devil's advocate attitude.`;
+
+    if (isTldr) {
+        return `${basePersona} Summarize the following Discord conversation in 1-2 extremely concise sentences. For each key participant, provide one very short, funny, and sarcastic comment about their contribution. Also, include 1-2 general snarky observations about the conversation as a whole. Do not use bullet points. Ensure all sentences are complete. Refer to participants by their Discord username.`;
+    } else {
+        return `${basePersona} Generate a response that is witty, fun, and uses subtle sarcasm and relevant 90s/00s references to deliver the content.`;
+    }
+}
+
+// Cache for !snipe — stores last deleted message per channel
+const sniped = new Map();
+
+// ==========================================
 // DISCORD CLIENT INITIALIZATION
 // ==========================================
 const client = new Client({
@@ -306,6 +352,124 @@ client.on(Events.MessageCreate, async message => {
             return message.reply("Could not load word scoreboard.");
         }
     }
+
+    // ==========================================
+    // COMMAND: !tldr
+    // ==========================================
+    if (content.startsWith('!tldr')) {
+        if (await applyCooldown(message, 'tldr', COOLDOWN_SECONDS)) return;
+
+        const thinkingMessage = await message.channel.send('Thinking... distilling the essence of chaos into digestible nuggets.');
+
+        try {
+            const args = message.content.split(' ');
+            let messageCount = 50;
+            if (args.length > 1 && !isNaN(parseInt(args[1]))) {
+                messageCount = Math.min(parseInt(args[1]), 100);
+            }
+
+            const fetchedMessages = await message.channel.messages.fetch({ limit: messageCount, before: message.id });
+            const conversation = fetchedMessages
+                .filter(msg => !msg.author.bot)
+                .map(msg => `${msg.author.username}: ${msg.content}`)
+                .reverse()
+                .join('\n');
+
+            if (!conversation) {
+                await thinkingMessage.edit(`Looks like everyone's been quiet. Nothing to summarize here!`);
+                return;
+            }
+
+            const systemPrompt = getWittyPersonaPrompt(true);
+            const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    model: 'llama3-70b-8192',
+                    messages: [
+                        { role: 'system', content: systemPrompt },
+                        { role: 'user',   content: conversation  },
+                    ],
+                    max_tokens: 100,
+                    temperature: 0.9,
+                }),
+            });
+
+            const result = await groqRes.json();
+            const summary = result.choices?.[0]?.message?.content || 'My circuits are malfunctioning. Try again later!';
+
+            await thinkingMessage.edit(`**TLDR of the last ${fetchedMessages.size} messages:**\n${summary.trim()}`);
+        } catch (error) {
+            await thinkingMessage.edit(`My humor circuits are on the fritz: ${error.message}`);
+        }
+    }
+
+    // ==========================================
+    // COMMAND: !eli5
+    // ==========================================
+    if (content.startsWith('!eli5')) {
+        if (await applyCooldown(message, 'eli5', ELI5_COOLDOWN_SECONDS)) return;
+
+        const eli5Content = message.content.substring('!eli5'.length).trim();
+        if (!eli5Content) {
+            await message.reply("What do you want me to explain like you're 5? Give me something to work with, buttercup.");
+            return;
+        }
+
+        const thinkingMessage = await message.channel.send("Alright, buttercup, let's break this down without melting my circuits...");
+
+        try {
+            const basePrompt = getWittyPersonaPrompt(false);
+            const userPrompt = `Explain "${eli5Content}" factually and clearly, as if you're explaining it to someone who probably won't get it anyway. Keep the explanation concise, aiming for 2-3 sentences.`;
+
+            const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    model: 'llama3-70b-8192',
+                    messages: [
+                        { role: 'system', content: basePrompt  },
+                        { role: 'user',   content: userPrompt  },
+                    ],
+                    max_tokens: 100,
+                    temperature: 0.8,
+                }),
+            });
+
+            const result = await groqRes.json();
+            const explanation = result.choices?.[0]?.message?.content || 'Brain too big, explain later.';
+            const wikipediaLink = `https://en.wikipedia.org/wiki/${encodeURIComponent(eli5Content.replace(/ /g, '_'))}`;
+
+            await thinkingMessage.edit(`**ELI5:** ${explanation.trim()}\n\nWant to know more? Check out: <${wikipediaLink}>`);
+        } catch (error) {
+            await thinkingMessage.edit(`My simple-explanation circuits are on the fritz: ${error.message}`);
+        }
+    }
+
+    // ==========================================
+    // COMMAND: !snipe
+    // ==========================================
+    if (content.startsWith('!snipe')) {
+        const snipedMsg = sniped.get(message.channel.id);
+        if (!snipedMsg) {
+            return message.channel.send('nothing to snipe');
+        }
+
+        const embed = new EmbedBuilder()
+            .setAuthor({ name: snipedMsg.author, iconURL: snipedMsg.avatarURL })
+            .setDescription(snipedMsg.content)
+            .setColor(0xFF0000)
+            .setFooter({ text: 'Deleted message' })
+            .setTimestamp(snipedMsg.deletedAt);
+
+        return message.channel.send({ embeds: [embed] });
+    }
 });
 
 // ==========================================
@@ -391,6 +555,22 @@ client.on(Events.MessageReactionRemove, async (reaction, user) => {
             { merge: true }
         ).catch(() => null);
     }
+});
+
+// ==========================================
+// EVENT: MESSAGE DELETE — cache for !snipe
+// ==========================================
+client.on(Events.MessageDelete, message => {
+    // Partials have no content/author — nothing to cache
+    if (message.partial || message.author?.bot) return;
+    if (!message.content) return;
+
+    sniped.set(message.channel.id, {
+        content:    message.content,
+        author:     message.author.username,
+        avatarURL:  message.author.displayAvatarURL(),
+        deletedAt:  Date.now(),
+    });
 });
 
 // ==========================================
