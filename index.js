@@ -399,10 +399,17 @@ client.on(Events.MessageCreate, async message => {
             });
 
             const result = await groqRes.json();
+            if (!groqRes.ok) {
+                console.error(`!tldr Groq API error — status ${groqRes.status}:`, JSON.stringify(result));
+            }
+            if (!result.choices?.[0]?.message?.content) {
+                console.error('!tldr Groq returned no choices. Full response:', JSON.stringify(result));
+            }
             const summary = result.choices?.[0]?.message?.content || 'My circuits are malfunctioning. Try again later!';
 
             await thinkingMessage.edit(`**TLDR of the last ${fetchedMessages.size} messages:**\n${summary.trim()}`);
         } catch (error) {
+            console.error('!tldr error:', error);
             await thinkingMessage.edit(`My humor circuits are on the fritz: ${error.message}`);
         }
     }
@@ -443,11 +450,18 @@ client.on(Events.MessageCreate, async message => {
             });
 
             const result = await groqRes.json();
+            if (!groqRes.ok) {
+                console.error(`!eli5 Groq API error — status ${groqRes.status}:`, JSON.stringify(result));
+            }
+            if (!result.choices?.[0]?.message?.content) {
+                console.error('!eli5 Groq returned no choices. Full response:', JSON.stringify(result));
+            }
             const explanation = result.choices?.[0]?.message?.content || 'Brain too big, explain later.';
             const wikipediaLink = `https://en.wikipedia.org/wiki/${encodeURIComponent(eli5Content.replace(/ /g, '_'))}`;
 
             await thinkingMessage.edit(`**ELI5:** ${explanation.trim()}\n\nWant to know more? Check out: <${wikipediaLink}>`);
         } catch (error) {
+            console.error('!eli5 error:', error);
             await thinkingMessage.edit(`My simple-explanation circuits are on the fritz: ${error.message}`);
         }
     }
