@@ -385,7 +385,7 @@ client.on(Events.MessageCreate, async message => {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    model: 'llama3-70b-8192',
+                    model: 'llama-3.3-70b-versatile',
                     messages: [
                         { role: 'system', content: systemPrompt },
                         { role: 'user',   content: conversation  },
@@ -436,7 +436,7 @@ client.on(Events.MessageCreate, async message => {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    model: 'llama3-70b-8192',
+                    model: 'llama-3.3-70b-versatile',
                     messages: [
                         { role: 'system', content: basePrompt  },
                         { role: 'user',   content: userPrompt  },
@@ -539,7 +539,7 @@ client.on(Events.MessageCreate, async message => {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    model: 'llama3-70b-8192',
+                    model: 'llama-3.3-70b-versatile',
                     messages: [
                         { role: 'system', content: systemPrompt },
                         { role: 'user',   content: userPrompt   },
