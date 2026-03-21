@@ -507,9 +507,8 @@ client.on(Events.MessageCreate, async message => {
         const thinkingMessage = await message.channel.send(`Cooking up a **${targetUser.username}** impression...`);
 
         try {
-            // Pull stored messages from Firestore — keyed by lowercase username
-            const mimicKey = targetUser.username.toLowerCase();
-            const mimicRef = doc(db, 'artifacts', FIREBASE_APP_ID, 'mimicData', mimicKey);
+            // Pull stored messages from Firestore — keyed by user ID
+            const mimicRef = doc(db, 'artifacts', FIREBASE_APP_ID, 'mimicData', targetUser.id);
             const mimicSnap = await getDoc(mimicRef);
 
             if (!mimicSnap.exists() || !mimicSnap.data().messages?.length) {
