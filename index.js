@@ -538,14 +538,17 @@ client.on(Events.MessageCreate, async message => {
 
             const { messages, username } = mimicSnap.data();
 
-            // Feed up to 150 messages to stay within Groq's context limit
-            const sample = messages.slice(0, 150).join('\n');
+            // Randomly sample 50 messages each call so the model sees different context every time
+            const shuffled = [...messages].sort(() => Math.random() - 0.5);
+            const sample = shuffled.slice(0, 50).join('\n');
 
             const systemPrompt =
                 'You are an expert at analyzing someone\'s unique writing style and generating new messages that ' +
                 'sound exactly like them. Study their tone, vocabulary, punctuation habits, slang, use of caps, ' +
                 'humor, and sentence length. Generate ONE Discord message that sounds authentically like this person. ' +
                 'Keep it to 1-2 complete sentences — never cut off mid-thought. Always end on a fully completed sentence. ' +
+                'Never repeat or closely paraphrase something you\'ve said before. Draw from the full range of topics ' +
+                'and phrases in the messages, not just the most common ones. Every response should feel distinct. ' +
                 'Output only the message text — no explanation, no surrounding quotes, no preamble.';
 
             const userPrompt =
