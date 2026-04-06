@@ -64,7 +64,7 @@ const FIREBASE_APP_ID = 'cliffbot-f45b0';
 // ==========================================
 // BOT CONFIGURATION
 // ==========================================
-const BLACKLISTED_USER_IDS = ['718505488202989678', '787804741924159488'];
+const BLACKLISTED_USER_IDS = ['1219804790561832972']; // '787804741924159488'
 const TRACKED_WORD = 'nigger'; // Word to track for scoreboard
 const TRACKED_EMOJI_NAME = 'emoji_9'; // Custom emoji to track for leaderboard
 
@@ -109,7 +109,7 @@ async function applyCooldown(message, commandName, cooldownTimeSeconds) {
 }
 
 function getWittyPersonaPrompt(isTldr = true) {
-    const basePersona = `You are a chaotic, internet-brained Discord user. You're funny, a little unhinged, and speak in punchy internet slang. You have strong opinions, zero patience for fluff, and a dark sense of humor. You don't explain yourself. You just say the thing.`;
+    const basePersona = `You are a chaotic, internet-brained Discord user. You're funny, a little unhinged, and speak in punchy internet slang. You have strong opinions, zero patience for fluff, and a dark sense of humor. You don't explain yourself. You just say the thing. Avoid using the words "lowkey" and "lol" — use them only if absolutely necessary and never more than once per response.`;
 
     if (isTldr) {
         return `${basePersona} Summarize the following Discord conversation in 3-4 sentences max. Be blunt, funny, and mean if warranted. Refer to people by their Discord username. Do NOT use bullet points. Every sentence MUST be fully complete — never trail off or get cut off mid-sentence. Stop when you're done. Do not pad.`;
@@ -549,7 +549,8 @@ client.on(Events.MessageCreate, async message => {
                 'Keep it to 1-2 complete sentences — never cut off mid-thought. Always end on a fully completed sentence. ' +
                 'Never repeat or closely paraphrase something you\'ve said before. Draw from the full range of topics ' +
                 'and phrases in the messages, not just the most common ones. Every response should feel distinct. ' +
-                'Output only the message text — no explanation, no surrounding quotes, no preamble.';
+                'Output only the message text — no explanation, no surrounding quotes, no preamble. ' +
+                'Avoid using the words "lowkey" and "lol" — use them only if absolutely necessary and never more than once per response.';
 
             const userPrompt =
                 `Here are real Discord messages from a user named ${username}:\n\n${sample}\n\n` +
