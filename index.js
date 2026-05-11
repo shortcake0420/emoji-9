@@ -64,7 +64,7 @@ const FIREBASE_APP_ID = 'cliffbot-f45b0';
 // ==========================================
 // BOT CONFIGURATION
 // ==========================================
-const BLACKLISTED_USER_IDS = ['1219804790561832972']; // '787804741924159488'
+const BLACKLISTED_USER_IDS = []; // '787804741924159488'
 const TRACKED_WORD = 'nigger'; // Word to track for scoreboard
 const TRACKED_EMOJI_NAME = 'emoji_9'; // Custom emoji to track for leaderboard
 
