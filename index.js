@@ -495,15 +495,15 @@ if (content.startsWith('!book')) {
 
     try {
         const searchRes = await fetch(
-            `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=1`
-        );
+    `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&lang=eng&limit=5`
+);
         const searchData = await searchRes.json();
 
         if (!searchData.docs?.length) {
             return thinkingMessage.edit(`Couldn't find anything for **${query}**. Try a different title.`);
         }
 
-        const book = searchData.docs[0];
+        const book = searchData.docs.find(d => d.language?.includes('eng')) ?? searchData.docs[0];
         const title = book.title ?? 'Unknown Title';
         const author = book.author_name?.[0] ?? 'Unknown Author';
         const year = book.first_publish_year ?? 'Unknown Year';
