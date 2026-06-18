@@ -483,6 +483,71 @@ client.on(Events.MessageCreate, async message => {
     }
 
     // ==========================================
+// COMMAND: !book
+// ==========================================
+if (content.startsWith('!book')) {
+    const query = message.content.slice('!book'.length).trim();
+    if (!query) {
+        return message.reply('Usage: `!book <title>` — e.g. `!book the hobbit`');
+    }
+
+    const thinkingMessage = await message.channel.send(`Looking up **${query}**...`);
+
+    try {
+        const searchRes = await fetch(
+            `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=1`
+        );
+        const searchData = await searchRes.json();
+
+        if (!searchData.docs?.length) {
+            return thinkingMessage.edit(`Couldn't find anything for **${query}**. Try a different title.`);
+        }
+
+        const book = searchData.docs[0];
+        const title = book.title ?? 'Unknown Title';
+        const author = book.author_name?.[0] ?? 'Unknown Author';
+        const year = book.first_publish_year ?? 'Unknown Year';
+        const olKey = book.key; // e.g. /works/OL45883W
+        const pageUrl = `https://openlibrary.org${olKey}`;
+        const coverId = book.cover_i;
+        const coverUrl = coverId
+            ? `https://covers.openlibrary.org/b/id/${coverId}-L.jpg`
+            : null;
+
+        // Check if ebook/PDF is available
+        let ebookUrl = null;
+        if (book.has_fulltext && book.ia?.[0]) {
+            ebookUrl = `https://archive.org/details/${book.ia[0]}`;
+        }
+
+        const embed = new EmbedBuilder()
+            .setTitle(title)
+            .setURL(pageUrl)
+            .addFields(
+                { name: 'Author', value: author, inline: true },
+                { name: 'First Published', value: String(year), inline: true },
+            )
+            .setColor(0x4B8BBE)
+            .setFooter({ text: 'Powered by Open Library' });
+
+        if (coverUrl) embed.setThumbnail(coverUrl);
+
+        if (ebookUrl) {
+            embed.addFields({ name: '📖 Free Ebook', value: `[Read / Download on Internet Archive](${ebookUrl})` });
+        } else {
+            embed.addFields({ name: '📖 Ebook', value: 'No free ebook available for this title.' });
+        }
+
+        await thinkingMessage.delete().catch(() => null);
+        return message.channel.send({ embeds: [embed] });
+
+    } catch (error) {
+        console.error('!book error:', error);
+        return thinkingMessage.edit('Something went wrong looking that up. Try again.');
+    }
+}
+    
+    // ==========================================
     // COMMAND: !mimic
     // ==========================================
     if (content.startsWith('!mimic')) {
