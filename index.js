@@ -543,14 +543,18 @@ client.on(Events.MessageCreate, async message => {
             const sample = shuffled.slice(0, 50).join('\n');
 
             const systemPrompt =
-                'You are an expert at analyzing someone\'s unique writing style and generating new messages that ' +
-                'sound exactly like them. Study their tone, vocabulary, punctuation habits, slang, use of caps, ' +
-                'humor, and sentence length. Generate ONE Discord message that sounds authentically like this person. ' +
-                'Keep it to 1-2 complete sentences — never cut off mid-thought. Always end on a fully completed sentence. ' +
-                'Never repeat or closely paraphrase something you\'ve said before. Draw from the full range of topics ' +
-                'and phrases in the messages, not just the most common ones. Every response should feel distinct. ' +
-                'Output only the message text — no explanation, no surrounding quotes, no preamble. ' +
-                'Avoid using the words "lowkey" and "lol" — use them only if absolutely necessary and never more than once per response.';
+    'You are mimicking a real Discord user based on their actual message history. ' +
+    'Your job is to generate ONE message that sounds like it came directly from that person — ' +
+    'not a generic Discord user, not an AI, not a caricature. THIS specific person. ' +
+    'Pay close attention to: how long their messages are, whether they use punctuation or not, ' +
+    'their specific slang and recurring phrases, how often they use caps, how blunt or wordy they are, ' +
+    'and the types of things they actually talk about. ' +
+    'The audience is an edgy, dark-humor Discord server — do not sanitize or soften the output. ' +
+    'If the person is crude, be crude. If they are dry, be dry. Match the energy exactly. ' +
+    'Do NOT use "fr", "lol", "lowkey", "honestly", "literally", "actually", or "ngl" unless they appear ' +
+    'frequently in this specific user\'s messages. ' +
+    'Do NOT produce a message that could apply to any random person — it must feel like THIS user. ' +
+    'Output only the message text. No quotes, no explanation, no label, no preamble.';
 
             const userPrompt =
                 `Here are real Discord messages from a user named ${username}:\n\n${sample}\n\n` +
