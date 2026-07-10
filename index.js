@@ -385,7 +385,7 @@ client.on(Events.MessageCreate, async message => {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    model: 'llama-3.3-70b-versatile',
+                    model: 'openai/gpt-oss-120b',
                     messages: [
                         { role: 'system', content: systemPrompt },
                         { role: 'user',   content: conversation  },
@@ -436,7 +436,7 @@ client.on(Events.MessageCreate, async message => {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    model: 'llama-3.3-70b-versatile',
+                    model: 'openai/gpt-oss-120b',
                     messages: [
                         { role: 'system', content: basePrompt  },
                         { role: 'user',   content: userPrompt  },
@@ -632,7 +632,7 @@ if (content.startsWith('!book')) {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    model: 'llama-3.3-70b-versatile',
+                    model: 'qwen/qwen3.6-27b',
                     messages: [
                         { role: 'system', content: systemPrompt },
                         { role: 'user',   content: userPrompt   },
