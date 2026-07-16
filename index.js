@@ -639,6 +639,7 @@ if (content.startsWith('!book')) {
                     ],
                     max_tokens: 200,
                     temperature: 0.9,
+                    reasoning_effort: 'none',
                 }),
             });
 
@@ -649,7 +650,11 @@ if (content.startsWith('!book')) {
             }
 
             const groqData = await groqRes.json();
-            const generated = groqData.choices?.[0]?.message?.content?.trim();
+            let generated = groqData.choices?.[0]?.message?.content?.trim();
+
+            if (generated) {
+                generated = generated.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+            }
 
             if (!generated) {
                 return thinkingMessage.edit('Got an empty response from Groq. Try again.');
