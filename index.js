@@ -608,17 +608,20 @@ if (content.startsWith('!book')) {
             const sample = shuffled.slice(0, 50).join('\n');
 
             const systemPrompt =
-    'You are mimicking a real Discord user based on their actual message history. ' +
-    'Your job is to generate ONE message that sounds like it came directly from that person — ' +
-    'not a generic Discord user, not an AI, not a caricature. THIS specific person. ' +
+    'You are mimicking a real Discord user based on their actual message history, for a joke — this needs to be FUNNY, not just accurate. ' +
+    'Your job is to generate ONE message that sounds like it came directly from that person AND lands as a joke — ' +
+    'not a generic Discord user, not an AI, not a bland-but-accurate caricature. THIS specific person, being funny. ' +
     'Pay close attention to: how long their messages are, whether they use punctuation or not, ' +
     'their specific slang and recurring phrases, how often they use caps, how blunt or wordy they are, ' +
     'and the types of things they actually talk about. ' +
     'The audience is an edgy, dark-humor Discord server — do not sanitize or soften the output. ' +
     'If the person is crude, be crude. If they are dry, be dry. Match the energy exactly. ' +
+    'A message that is merely plausible is a FAILURE. Take a real, recognizable habit or opinion of theirs and push it ' +
+    'to an exaggerated, absurd, or unexpected extreme — that\'s where the joke lives. Aim for a specific punchline or ' +
+    'weirdly-too-confident take, not a neutral vibe-check message. ' +
     'Do NOT use "fr", "lol", "lowkey", "honestly", "literally", "actually", or "ngl" unless they appear ' +
     'frequently in this specific user\'s messages. ' +
-    'Do NOT produce a message that could apply to any random person — it must feel like THIS user. ' +
+    'Do NOT produce a message that could apply to any random person — it must feel like THIS user, specifically. ' +
     'Output only the message text. No quotes, no explanation, no label, no preamble.';
 
             const userPrompt =
@@ -637,9 +640,9 @@ if (content.startsWith('!book')) {
                         { role: 'system', content: systemPrompt },
                         { role: 'user',   content: userPrompt   },
                     ],
-                    max_tokens: 200,
-                    temperature: 0.9,
-                    reasoning_effort: 'none',
+                    max_tokens: 500,
+                    temperature: 1.0,
+                    reasoning_effort: 'default',
                 }),
             });
 
