@@ -640,9 +640,10 @@ if (content.startsWith('!book')) {
                         { role: 'system', content: systemPrompt },
                         { role: 'user',   content: userPrompt   },
                     ],
-                    max_tokens: 500,
+                    max_tokens: 800,
                     temperature: 1.0,
                     reasoning_effort: 'default',
+                    reasoning_format: 'hidden',
                 }),
             });
 
